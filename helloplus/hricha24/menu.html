@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Food Hall Menu</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4efe6;
+      color: #2d2926;
+      margin: 0;
+      padding: 32px 16px;
+    }
+
+    main {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .intro {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .menu {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .menu-item {
+      border: 2px solid #d6c7b5;
+      border-radius: 8px;
+      background: white;
+      padding: 18px;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+      color: inherit;
+    }
+
+    .menu-item:hover,
+    .menu-item:focus {
+      border-color: #b65c35;
+      outline: none;
+    }
+
+    .menu-item h2 {
+      font-size: 1.1rem;
+      margin: 0 0 10px;
+    }
+
+    .calories {
+      color: #8c4226;
+      font-weight: bold;
+    }
+
+    .details {
+      background: #fffaf2;
+      border-left: 5px solid #b65c35;
+      margin-top: 28px;
+      padding: 20px;
+      min-height: 100px;
+    }
+
+    .details h2 {
+      margin-top: 0;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Food Hall Menu</h1>
+    <p class="intro">Click a menu item to see more information.</p>
+
+    <section id="menu" class="menu" aria-label="Food hall menu"></section>
+
+    <section id="details" class="details" aria-live="polite">
+      <h2>Select an item</h2>
+      <p>More information about your selection will appear here.</p>
+    </section>
+  </main>
+
+  <script>
+    const menu = [
+      {
+        name: "Crispy Chicken Bowl",
+        description: "Seasoned chicken, rice, corn, and fresh salsa.",
+        calories: 650,
+        ingredients: "Chicken, rice, corn, tomatoes, onions, and spices."
+      },
+      {
+        name: "Garden Veggie Wrap",
+        description: "Fresh vegetables, hummus, and greens in a warm wrap.",
+        calories: 420,
+        ingredients: "Tortilla, lettuce, cucumber, tomato, carrots, and hummus."
+      },
+      {
+        name: "Margherita Pizza Slice",
+        description: "Tomato, mozzarella, and basil on a crispy crust.",
+        calories: 380,
+        ingredients: "Pizza dough, tomato sauce, mozzarella, and basil."
+      },
+      {
+        name: "Chocolate Chip Cookie",
+        description: "A warm cookie with chocolate chips.",
+        calories: 240,
+        ingredients: "Flour, butter, sugar, eggs, vanilla, and chocolate chips."
+      },
+      {
+        name: "Lemon Iced Tea",
+        description: "Cold black tea with fresh lemon.",
+        calories: 120,
+        ingredients: "Black tea, lemon juice, water, and sugar."
+      }
+    ];
+
+    const menuElement = document.getElementById("menu");
+    const detailsElement = document.getElementById("details");
+
+    menu.forEach((item) => {
+      const button = document.createElement("button");
+      button.className = "menu-item";
+      button.innerHTML = `
+        <h2>${item.name}</h2>
+        <p>${item.description}</p>
+        <p class="calories">${item.calories} calories</p>
+      `;
+
+      button.addEventListener("click", () => {
+        detailsElement.innerHTML = `
+          <h2>${item.name}</h2>
+          <p>${item.description}</p>
+          <p><strong>Calories:</strong> ${item.calories}</p>
+          <p><strong>Ingredients:</strong> ${item.ingredients}</p>
+        `;
+      });
+
+      menuElement.appendChild(button);
+    });
+  </script>
+</body>
+</html>
