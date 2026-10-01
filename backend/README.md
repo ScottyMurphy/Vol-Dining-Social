@@ -10,9 +10,9 @@
 ```
 
 3. Generate a secret key:
-   node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+   Open the terminal and run: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
-   Copy the output and paste it into `.env` after `JWT_SECRET=`.
+   Copy the output and paste it into `.env` where it says YOUR_STRING, the line will look like this: JWT_SECRET="YOUR_STRING".
 
 4. Start the server:
    node index.js
