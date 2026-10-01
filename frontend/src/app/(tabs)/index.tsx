@@ -8,6 +8,7 @@ import {
 } from "react-native";
 
 import { router } from "expo-router";
+import LogoutButton from "../../components/LogoutButton";
 
 export default function Index() {
   return (
@@ -16,7 +17,10 @@ export default function Index() {
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.logo}>VOL Dining Social</Text>
+          <View style={styles.headerTop}>
+            <Text style={styles.logo}>VOL Dining Social</Text>
+            <LogoutButton />
+          </View>
           <Text style={styles.tagline}>Eat better together.</Text>
         </View>
 
@@ -126,10 +130,18 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+
   logo: {
     fontSize: 30,
     fontWeight: "800",
     color: "#FF8200",
+    flexShrink: 1,
   },
 
   tagline: {
