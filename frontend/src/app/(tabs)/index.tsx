@@ -7,6 +7,8 @@ import {
   View,
 } from "react-native";
 
+import { router } from "expo-router";
+
 export default function Index() {
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -36,7 +38,10 @@ export default function Index() {
 
         {/* Dining Locations */}
 
-        <TouchableOpacity style={styles.restaurantCard}>
+        <TouchableOpacity
+          style={styles.restaurantCard}
+          onPress={() => router.push("/rocky-top")}
+        >
           <View>
             <Text style={styles.restaurantName}>Rocky Top</Text>
             <Text style={styles.restaurantInfo}>
@@ -49,7 +54,10 @@ export default function Index() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.restaurantCard}>
+        <TouchableOpacity
+          style={styles.restaurantCard}
+          onPress={() => router.push("/stokely")}
+        >
           <View>
             <Text style={styles.restaurantName}>Stokely</Text>
             <Text style={styles.restaurantInfo}>
