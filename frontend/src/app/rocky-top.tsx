@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import DiningMenu from "../components/dining-menu";
 import {
   Alert,
   SafeAreaView,
@@ -133,11 +134,7 @@ export default function RockyTop() {
           </View>
         )}
 
-        <TouchableOpacity style={styles.menuButton}>
-          <Text style={styles.menuButtonText}>
-            Today's Menu at Rocky Top
-          </Text>
-        </TouchableOpacity>
+        <DiningMenu hallId="rocky-top" hallName="Rocky Top" />
 
         <Text style={styles.sectionTitle}>What other Vols are thinking..</Text>
 

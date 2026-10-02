@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import DiningMenu from "../components/dining-menu";
 import {
   Alert,
   SafeAreaView,
@@ -133,11 +134,7 @@ export default function Stokely() {
           </View>
         )}
 
-        <TouchableOpacity style={styles.menuButton}>
-          <Text style={styles.menuButtonText}>
-            Today's Menu at Stokely
-          </Text>
-        </TouchableOpacity>
+        <DiningMenu hallId="stokely" hallName="Stokely" />
 
         <Text style={styles.sectionTitle}>What other Vols are thinking..
             
