@@ -1,0 +1,7 @@
+{"_e":"root:init","_t":1791928804016,"format":"v0-jsonl","version":"57.0.29"}
+{"_e":"env:mode","_t":1791928804019,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1791928804027,"mode":"development","files":["../..\\..\\.env"],"env":{"JWT_SECRET":"dc0bc6ddbc6f2625b97d724d3dd965999fa14bb423fe36654976e3830f2031451a0a7aaccdd32fc59e9db4f6fea64e6df858d0a582234b969644be789240b9d5"}}
+{"_e":"devserver:start","_t":1791928808911,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1791928819234,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1791928826692,"plugins":[]}
+{"_e":"metro:instantiate","_t":1791928835118,"atlas":false,"workers":10,"host":"::","port":8081}

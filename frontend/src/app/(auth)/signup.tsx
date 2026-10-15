@@ -28,22 +28,37 @@ export default function SignupScreen() {
     }
     setLoading(true);
     try {
+      console.log("API URL:", API_URL);
+      console.log("Starting signup request");
+
       const signupRes = await post("/api/signup");
+      console.log("Signup status:", signupRes.status);
+
       const signupData = await signupRes.json();
+      console.log("Signup response:", signupData);
+
       if (!signupRes.ok) {
         setError(signupData.error ?? "Something went wrong");
         return;
       }
 
+      console.log("Starting login request");
+
       const loginRes = await post("/api/login");
+      console.log("Login status:", loginRes.status);
+
       const loginData = await loginRes.json();
+      console.log("Login response status:", loginRes.ok ? "Success" : "Failed");
       if (!loginRes.ok) {
         setError("Account created. Please log in.");
         return;
       }
+      console.log("Starting signIn");
       await signIn(loginData.token);
-    } catch {
-      setError("Can't reach the server. Is the backend running?");
+      console.log("signIn completed");
+    } catch (error) {
+      console.log("Account creation error:", error);
+      setError("An error occurred. Check the Expo terminal.");
     } finally {
       setLoading(false);
     }

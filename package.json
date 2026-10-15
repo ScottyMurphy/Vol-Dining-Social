@@ -1,0 +1,26 @@
+{
+  "name": "vol-dining-social",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+"scripts": {
+  "start": "concurrently --raw \"npm run backend\" \"npm run frontend\"",
+  "backend": "npm --prefix backend run start",
+  "frontend": "npm --prefix frontend run start -- --go"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ScottyMurphy/Vol-Dining-Social.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ScottyMurphy/Vol-Dining-Social/issues"
+  },
+  "homepage": "https://github.com/ScottyMurphy/Vol-Dining-Social#readme",
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}
