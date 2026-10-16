@@ -21,4 +21,16 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS dining_hall_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    cleanliness INTEGER NOT NULL CHECK (cleanliness BETWEEN 1 AND 5),
+    service INTEGER NOT NULL CHECK (service BETWEEN 1 AND 5),
+    submitted_at TEXT NOT NULL,
+    UNIQUE (location_id, user_id)
+  )
+`);
+
 module.exports = db;

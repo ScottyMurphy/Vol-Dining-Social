@@ -5,12 +5,23 @@ const jwt = require("jsonwebtoken");
 
 const router = express.Router();
 
-router.post("/signup", async (req, res) => {
-  const email = req.body.email?.trim().toLowerCase();
-  const password = req.body.password;
+function normalizeEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
 
-  if (!email || !password) {
+function isUtkEmail(email) {
+  return /^[^@\s]+@vols\.utk\.edu$/.test(email);
+}
+
+router.post("/signup", async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const password = req.body?.password;
+
+  if (!email || typeof password !== "string" || !password) {
     return res.status(400).json({ error: "Email and password are required" });
+  }
+  if (!isUtkEmail(email)) {
+    return res.status(403).json({ error: "Please sign up with your @vols.utk.edu email" });
   }
   if (password.length < 8) {
     return res.status(400).json({ error: "Password must be at least 8 characters" });
@@ -30,17 +41,16 @@ router.post("/signup", async (req, res) => {
 });
 
 router.post("/login", async (req, res) => {
-  const email = req.body.email?.trim().toLowerCase();
-  const password = req.body.password;
+  const email = normalizeEmail(req.body?.email);
+  const password = req.body?.password;
 
-  if (!email || !password) {
+  if (!email || typeof password !== "string" || !password) {
     return res.status(400).json({ error: "Email and password are required" });
   }
 
   const allowedEmails = ["admin@test"];
-  const isUtkEmail = email.endsWith("@vols.utk.edu");
 
-  if (!isUtkEmail && !allowedEmails.includes(email)) {
+  if (!isUtkEmail(email) && !allowedEmails.includes(email)) {
     return res.status(403).json({ error: "Please sign up with your @vols.utk.edu email" });
   }
 

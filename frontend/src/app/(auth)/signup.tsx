@@ -22,43 +22,34 @@ export default function SignupScreen() {
 
   const handleSignup = async () => {
     setError("");
+    if (!/^[^@\s]+@vols\.utk\.edu$/i.test(email.trim())) {
+      setError("Please use your @vols.utk.edu email address");
+      return;
+    }
     if (password !== confirm) {
       setError("Passwords don't match");
       return;
     }
     setLoading(true);
     try {
-      console.log("API URL:", API_URL);
-      console.log("Starting signup request");
-
       const signupRes = await post("/api/signup");
-      console.log("Signup status:", signupRes.status);
-
       const signupData = await signupRes.json();
-      console.log("Signup response:", signupData);
 
       if (!signupRes.ok) {
         setError(signupData.error ?? "Something went wrong");
         return;
       }
 
-      console.log("Starting login request");
-
       const loginRes = await post("/api/login");
-      console.log("Login status:", loginRes.status);
 
       const loginData = await loginRes.json();
-      console.log("Login response status:", loginRes.ok ? "Success" : "Failed");
       if (!loginRes.ok) {
         setError("Account created. Please log in.");
         return;
       }
-      console.log("Starting signIn");
       await signIn(loginData.token);
-      console.log("signIn completed");
-    } catch (error) {
-      console.log("Account creation error:", error);
-      setError("An error occurred. Check the Expo terminal.");
+    } catch {
+      setError("Unable to create your account. Please try again.");
     } finally {
       setLoading(false);
     }

@@ -21,3 +21,13 @@ Signed-in users can submit a crowd level for `rocky-top`, `stokely`, or
 to `POST /api/crowd/:locationId` with the login token in a `Bearer` authorization
 header. `GET /api/crowd/:locationId` returns the average crowd level and report
 count from the last two hours, plus the signed-in user's current report.
+
+## Dining hall reviews
+
+Signed-in users can rate cleanliness and service from 1 to 5 for
+`rocky-top`, `stokely`, or `southern-kitchen`. Send both integer ratings in
+`cleanliness` and `service` fields to `POST /api/reviews/:locationId` with the
+login token in a `Bearer` authorization header. A user's ratings are updated
+when they submit again. `GET /api/reviews/:locationId` returns the average
+cleanliness and service ratings, the review count, and the signed-in user's
+ratings.
