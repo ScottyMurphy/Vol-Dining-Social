@@ -2,6 +2,7 @@ import { useState } from "react";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import DiningMenu from "../components/dining-menu";
+import CrowdReportCard from "../components/CrowdReportCard";
 import {
   Alert,
   SafeAreaView,
@@ -88,6 +89,8 @@ export default function Stokely() {
             <Text style={styles.postButtonText}>Post a Review</Text>
           </TouchableOpacity>
         </View>
+
+        <CrowdReportCard locationId="stokely" locationName="Stokely" />
 
         {showReviewForm && (
           <View style={styles.reviewForm}>
