@@ -5,6 +5,7 @@ const cors = require("cors");
 const authRoutes = require("./routes/auth");
 const crowdRoutes = require("./routes/crowd");
 const reviewRoutes = require("./routes/review");
+const communityRoutes = require("./routes/community");
 
 const app = express();
 const {
@@ -30,6 +31,7 @@ app.get("/api/dining", async (req, res) => {
 app.use("/api", authRoutes);
 app.use("/api", crowdRoutes);
 app.use("/api", reviewRoutes);
+app.use("/api", communityRoutes);
 
 app.listen(4000, () => console.log("Backend running on port 4000"));
 
