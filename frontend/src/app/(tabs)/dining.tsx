@@ -77,13 +77,13 @@ export default function Dining() {
       />
 
       <Text style={styles.sectionTitle}>Menus</Text>
-
-      {locations.map((item) => (
-        <TouchableOpacity
-          key={item.name}
-          style={styles.card}
-          disabled={!item.menuUrl}
-          onPress={() => {
+      {Array.isArray(locations) &&
+        locations.map((item) => (
+          <TouchableOpacity
+            key={item.name}
+            style={styles.card}
+            disabled={!item.menuUrl}
+            onPress={() => {
             if (item.menuUrl) {
               router.push({
                 pathname: "/menu",
