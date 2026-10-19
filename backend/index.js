@@ -22,9 +22,11 @@ app.get("/api/dining", async (req, res) => {
     const locations = await scrapeLocations();
     res.json(locations);
   } catch (error) {
-    console.error(error);
+    console.error("DINING SCRAPER ERROR:", error);
+
     res.status(500).json({
       error: "Failed to retrieve dining information",
+      details: error.message,
     });
   }
 });
@@ -32,8 +34,6 @@ app.use("/api", authRoutes);
 app.use("/api", crowdRoutes);
 app.use("/api", reviewRoutes);
 app.use("/api", communityRoutes);
-
-app.listen(4000, () => console.log("Backend running on port 4000"));
 
 app.get("/api/menu", async (req, res) => {
   try {
@@ -56,3 +56,7 @@ app.get("/api/menu", async (req, res) => {
     });
   }
 });
+
+app.listen(4000, () =>
+  console.log("Backend running on port 4000")
+);

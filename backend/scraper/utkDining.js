@@ -214,3 +214,7 @@ async function scrapeDiningHallMenu(menuUrl) {
     await browser.close();
   }
 }
+module.exports = {
+  scrapeLocations,
+  scrapeMenu,
+};

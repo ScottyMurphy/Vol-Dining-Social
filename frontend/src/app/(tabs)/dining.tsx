@@ -26,10 +26,19 @@ export default function Dining() {
       .then((response) => response.json())
       .then((data) => {
         console.log("DINING DATA:", data);
-        setLocations(data);
+
+        if (Array.isArray(data)) {
+          setLocations(data);
+        } else if (Array.isArray(data.locations)) {
+          setLocations(data.locations);
+        } else {
+          console.error("Unexpected dining data format:", data);
+          setLocations([]);
+        }
       })
       .catch((error) => {
         console.error("Failed to load dining locations:", error);
+        setLocations([]);
       })
       .finally(() => {
         setLoading(false);
@@ -77,13 +86,13 @@ export default function Dining() {
       />
 
       <Text style={styles.sectionTitle}>Menus</Text>
-
-      {locations.map((item) => (
-        <TouchableOpacity
-          key={item.name}
-          style={styles.card}
-          disabled={!item.menuUrl}
-          onPress={() => {
+      {Array.isArray(locations) &&
+        locations.map((item) => (
+          <TouchableOpacity
+            key={item.name}
+            style={styles.card}
+            disabled={!item.menuUrl}
+            onPress={() => {
             if (item.menuUrl) {
               router.push({
                 pathname: "/menu",
