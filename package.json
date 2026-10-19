@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-"scripts": {
-  "start": "concurrently --raw \"npm run backend\" \"npm run frontend\"",
-  "backend": "npm --prefix backend run start",
-  "frontend": "npm --prefix frontend run start -- --go"
+  "scripts": {
+    "start": "concurrently --raw \"npm run backend\" \"npm run frontend\"",
+    "backend": "npm --prefix backend run start",
+    "frontend": "npm --prefix frontend run start -- --go"
   },
   "repository": {
     "type": "git",
@@ -22,5 +22,8 @@
   "homepage": "https://github.com/ScottyMurphy/Vol-Dining-Social#readme",
   "devDependencies": {
     "concurrently": "^10.0.6"
+  },
+  "dependencies": {
+    "expo": "^58.0.14"
   }
 }

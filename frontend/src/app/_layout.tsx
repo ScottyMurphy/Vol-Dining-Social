@@ -8,21 +8,19 @@ function RootNavigator() {
     return null;
   }
 
-  // Logged-in user
-  if (token) {
-    return (
-      <Stack screenOptions={{ headerShown: false }}>
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Protected guard={!token}>
+        <Stack.Screen name="(auth)" />
+      </Stack.Protected>
+
+      <Stack.Protected guard={!!token}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="service-reviews" />
         <Stack.Screen name="menu" />
-      </Stack>
-    );
-  }
-
-  // Logged-out user
-  return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(auth)" />
+        <Stack.Screen name="rocky-top" />
+        <Stack.Screen name="stokely" />
+      </Stack.Protected>
     </Stack>
   );
 }
