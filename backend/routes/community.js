@@ -6,11 +6,10 @@
 // what keeps posts anonymous.
 
 const express = require("express");
-const fs = require("fs");
-const path = require("path");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const db = require("../db");
+const containsBadWords = require("../badwordsReviewer");
 
 const router = express.Router();
 
@@ -98,20 +97,6 @@ if (!postColumns.some((column) => column.name === "tag")) {
 // Dining hall tags a post can have (same ids the crowd meter and reviews use).
 const TAGS = new Set(["rocky-top", "stokely", "southern-kitchen", "general"]);
 const MAX_POLL_OPTION_LENGTH = 50;
-
-// ---------- Bad word filter (same list the reviews use) ----------
-const badWords = new Set(
-  fs
-    .readFileSync(path.join(__dirname, "../data/badwords.txt"), "utf8")
-    .split(/\r?\n/)
-    .map((word) => word.trim().toLowerCase())
-    .filter((word) => word.length > 0)
-);
-
-function containsBadWords(text) {
-  const words = text.toLowerCase().split(/[^a-z0-9']+/);
-  return words.some((word) => badWords.has(word));
-}
 
 // ---------- Login check (same as the other routes) ----------
 function requireUser(req, res, next) {

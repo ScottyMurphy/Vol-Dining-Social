@@ -1,34 +1,10 @@
 const express = require("express");
-const fs = require("fs");
-const path = require("path");
 const jwt = require("jsonwebtoken");
 const db = require("../db");
+const containsBadWords = require("../badwordsReviewer");
 
 const router = express.Router();
 const locations = new Set(["rocky-top", "stokely", "southern-kitchen"]);
-
-//Find the bad words file
-const badWordsPath = path.join(__dirname, "../data/badwords.txt");
-
-//Read the bad words from the file
-const badWords = fs
-  .readFileSync(badWordsPath, "utf8")
-  .split(/\r?\n/)
-  .map(word => word.trim().toLowerCase())
-  .filter(word => word.length > 0);
-
-//Checks a review to see if it contains a bad word
-function containsBadWords(text) {
-  const words = text.toLowerCase().split(/\s+/);
-
-  for (const word of words) {
-    if (badWords.includes(word)) {
-      return true;
-    }
-  }
-
-  return false;
-}
 
 function requireUser(req, res, next) {
   const authorization = req.get("authorization");
