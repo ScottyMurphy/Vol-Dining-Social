@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { API_URL } from "../lib/config";
+import { DINING_HALLS, describeHallState, getHallState } from "../lib/mealPeriods";
+
+// How often to re-check the clock so the menu flips at meal boundaries.
+const CLOCK_CHECK_MS = 30 * 1000;
 
 type MenuItem = {
   name: string;
@@ -20,18 +24,28 @@ const MEAL_LABELS: Record<string, string> = {
   dinner: "Dinner",
 };
 
-// Picks the meal that is being served right now, based on the device clock.
-function currentMeal(available: string[]) {
-  const hour = new Date().getHours();
-  const guess = hour < 11 ? "breakfast" : hour < 16 ? "lunch" : "dinner";
-  return available.includes(guess) ? guess : available[0];
-}
-
 export default function DiningMenu({ hallId, hallName }: { hallId: string; hallName: string }) {
   const [menu, setMenu] = useState<Menu | null>(null);
-  const [meal, setMeal] = useState<string>("");
+  // A meal the person tapped manually; cleared whenever the serving period changes.
+  const [pickedMeal, setPickedMeal] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // This hall's state right now, from its own hours for today (see mealPeriods.ts).
+  const hall = DINING_HALLS.find((h) => h.id === hallId);
+  const state = hall ? getHallState(hall, now) : null;
+
+  // Keep the clock fresh so the menu switches on its own when a meal period changes.
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), CLOCK_CHECK_MS);
+    return () => clearInterval(timer);
+  }, []);
+
+  // When the serving period changes, go back to showing what is being served.
+  useEffect(() => {
+    setPickedMeal(null);
+  }, [state?.meal, state?.open]);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +57,6 @@ export default function DiningMenu({ hallId, hallName }: { hallId: string; hallN
         const data: Menu = await res.json();
         if (cancelled) return;
         setMenu(data);
-        setMeal(currentMeal(Object.keys(data.meals)));
       } catch {
         if (!cancelled) setError("Couldn't load today's menu. Is the backend running?");
       } finally {
@@ -58,7 +71,11 @@ export default function DiningMenu({ hallId, hallName }: { hallId: string; hallN
   }, [hallId]);
 
   const meals = menu ? Object.keys(menu.meals) : [];
+  const servingMeal = state?.meal && meals.includes(state.meal) ? state.meal : meals[0];
+  const meal = pickedMeal && meals.includes(pickedMeal) ? pickedMeal : servingMeal;
   const items = menu && meal ? menu.meals[meal] : [];
+
+  const status = state ? describeHallState(state) : "";
 
   return (
     <View style={styles.card}>
@@ -70,12 +87,14 @@ export default function DiningMenu({ hallId, hallName }: { hallId: string; hallN
 
       {menu && (
         <>
+          {!!status && <Text style={styles.status}>{status}</Text>}
+
           <View style={styles.mealRow}>
             {meals.map((m) => (
               <TouchableOpacity
                 key={m}
                 style={[styles.mealChip, m === meal && styles.mealChipActive]}
-                onPress={() => setMeal(m)}
+                onPress={() => setPickedMeal(m)}
               >
                 <Text style={[styles.mealChipText, m === meal && styles.mealChipTextActive]}>
                   {MEAL_LABELS[m] ?? m}
@@ -123,6 +142,12 @@ const styles = StyleSheet.create({
   error: {
     color: "#B00020",
     fontSize: 14,
+  },
+
+  status: {
+    color: "#555",
+    fontSize: 13,
+    marginBottom: 10,
   },
 
   mealRow: {

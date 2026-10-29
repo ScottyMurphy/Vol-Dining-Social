@@ -12,6 +12,7 @@ const {
   scrapeLocations,
   scrapeMenu,
 } = require("./scraper/utkDining");
+const { getAllMenus, getMenu } = require("./menus");
 
 app.use(cors());
 app.use(express.json());
@@ -30,6 +31,18 @@ app.get("/api/dining", async (req, res) => {
     });
   }
 });
+// Per-hall breakfast/lunch/dinner menus; the app picks the meal by time of day.
+app.get("/api/menus", (req, res) => res.json(getAllMenus()));
+app.get("/api/menus/:hallId", (req, res) => {
+  const menu = getMenu(req.params.hallId);
+
+  if (!menu) {
+    return res.status(404).json({ error: "Unknown dining hall" });
+  }
+
+  res.json(menu);
+});
+
 app.use("/api", authRoutes);
 app.use("/api", crowdRoutes);
 app.use("/api", reviewRoutes);

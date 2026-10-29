@@ -8,9 +8,34 @@ import {
 } from "react-native";
 
 import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import LogoutButton from "../../components/LogoutButton";
+import { DINING_HALLS, getHallStatus, getSplash } from "../../lib/mealPeriods";
+
+// How often to re-check the clock so the splash and open halls stay current.
+const CLOCK_CHECK_MS = 30 * 1000;
+
+function openHall(id: string) {
+  if (id === "rocky-top") router.push("/rocky-top");
+  else if (id === "stokely") router.push("/stokely");
+}
 
 export default function Index() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), CLOCK_CHECK_MS);
+    return () => clearInterval(timer);
+  }, []);
+
+  const splash = getSplash(DINING_HALLS, now);
+
+  // Open halls first; otherwise keep the original order.
+  const halls = DINING_HALLS.map((hall) => ({
+    hall,
+    status: getHallStatus(hall, now),
+  })).sort((a, b) => Number(b.status.open) - Number(a.status.open));
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -26,9 +51,9 @@ export default function Index() {
 
         {/* Meal Period */}
         <View style={styles.mealCard}>
-          <Text style={styles.mealLabel}>CURRENTLY SERVING</Text>
-          <Text style={styles.mealTitle}>Dinner</Text>
-          <Text style={styles.mealTime}>4:30 PM – 9:00 PM</Text>
+          <Text style={styles.mealLabel}>{splash.label}</Text>
+          <Text style={styles.mealTitle}>{splash.title}</Text>
+          <Text style={styles.mealTime}>{splash.subtitle}</Text>
         </View>
 
         {/* Section Header */}
@@ -42,50 +67,24 @@ export default function Index() {
 
         {/* Dining Locations */}
 
-        <TouchableOpacity
-          style={styles.restaurantCard}
-          onPress={() => router.push("/rocky-top")}
-        >
-          <View>
-            <Text style={styles.restaurantName}>Rocky Top</Text>
-            <Text style={styles.restaurantInfo}>
-              Dinner • Open Now
-            </Text>
-          </View>
+        {halls.map(({ hall, status }) => (
+          <TouchableOpacity
+            key={hall.id}
+            style={styles.restaurantCard}
+            onPress={() => openHall(hall.id)}
+          >
+            <View>
+              <Text style={styles.restaurantName}>{hall.name}</Text>
+              <Text style={styles.restaurantInfo}>{status.info}</Text>
+            </View>
 
-          <View style={styles.openBadge}>
-            <Text style={styles.openText}>OPEN</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.restaurantCard}
-          onPress={() => router.push("/stokely")}
-        >
-          <View>
-            <Text style={styles.restaurantName}>Stokely</Text>
-            <Text style={styles.restaurantInfo}>
-              Dinner • Open Now
-            </Text>
-          </View>
-
-          <View style={styles.openBadge}>
-            <Text style={styles.openText}>OPEN</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.restaurantCard}>
-          <View>
-            <Text style={styles.restaurantName}>Southern Kitchen</Text>
-            <Text style={styles.restaurantInfo}>
-              Closed for the evening
-            </Text>
-          </View>
-
-          <View style={styles.closedBadge}>
-            <Text style={styles.closedText}>CLOSED</Text>
-          </View>
-        </TouchableOpacity>
+            <View style={status.open ? styles.openBadge : styles.closedBadge}>
+              <Text style={status.open ? styles.openText : styles.closedText}>
+                {status.open ? "OPEN" : "CLOSED"}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ))}
 
         {/* Community Preview */}
 
