@@ -67,5 +67,30 @@ function getAllMenus() {
 function getMenu(diningHallId) {
   return menus[diningHallId] || null;
 }
+function getCurrentMeal() {
+  const now = new Date();
 
-module.exports = { menus, getAllMenus, getMenu };
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+
+  const minutesSinceMidnight = hour * 60 + minute;
+
+  const breakfastEnd = 10 * 60 + 30; // 10:30 AM
+  const lunchEnd = 16 * 60 + 30; // 4:30 PM
+
+  if (minutesSinceMidnight < breakfastEnd) {
+    return "breakfast";
+  }
+
+  if (minutesSinceMidnight < lunchEnd) {
+    return "lunch";
+  }
+
+  return "dinner";
+}
+module.exports = {
+  menus,
+  getAllMenus,
+  getMenu,
+  getCurrentMeal,
+};
