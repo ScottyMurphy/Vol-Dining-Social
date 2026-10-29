@@ -10,12 +10,7 @@ import {
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import LogoutButton from "../../components/LogoutButton";
-import {
-  DINING_HALLS,
-  formatMinutes,
-  getCurrentMeal,
-  getHallStatus,
-} from "../../lib/mealPeriods";
+import { DINING_HALLS, getHallStatus, getSplash } from "../../lib/mealPeriods";
 
 // How often to re-check the clock so the splash and open halls stay current.
 const CLOCK_CHECK_MS = 30 * 1000;
@@ -33,12 +28,12 @@ export default function Index() {
     return () => clearInterval(timer);
   }, []);
 
-  const current = getCurrentMeal(now);
+  const splash = getSplash(DINING_HALLS, now);
 
   // Open halls first; otherwise keep the original order.
   const halls = DINING_HALLS.map((hall) => ({
     hall,
-    status: getHallStatus(hall, current),
+    status: getHallStatus(hall, now),
   })).sort((a, b) => Number(b.status.open) - Number(a.status.open));
 
   return (
@@ -56,17 +51,9 @@ export default function Index() {
 
         {/* Meal Period */}
         <View style={styles.mealCard}>
-          <Text style={styles.mealLabel}>
-            {current.open ? "CURRENTLY SERVING" : "DINING HALLS CLOSED"}
-          </Text>
-          <Text style={styles.mealTitle}>
-            {current.open ? current.period.label : `${current.period.label} is next`}
-          </Text>
-          <Text style={styles.mealTime}>
-            {current.open
-              ? `${formatMinutes(current.period.start)} – ${formatMinutes(current.period.end)}`
-              : `Opens at ${formatMinutes(current.period.start)}`}
-          </Text>
+          <Text style={styles.mealLabel}>{splash.label}</Text>
+          <Text style={styles.mealTitle}>{splash.title}</Text>
+          <Text style={styles.mealTime}>{splash.subtitle}</Text>
         </View>
 
         {/* Section Header */}

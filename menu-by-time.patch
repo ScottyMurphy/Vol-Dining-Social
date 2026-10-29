@@ -1,0 +1,215 @@
+From 0d57b667cb5b6f6caab3479c3e61e98a1b5b4e9e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 29 Oct 2026 04:05:37 -0400
+Subject: [PATCH] Show breakfast/lunch/dinner menus based on system time
+
+Breakfast 7:00-10:30, lunch 10:30-16:30, dinner 16:30-22:00. The menu
+re-checks the clock every 30s so it switches at boundaries, shows a
+"now serving" status, and falls back to breakfast with a closed notice
+outside serving hours. Also registers the missing /api/menus routes
+that DiningMenu fetches from.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01QXHYnPHTD4jFtEm6DGQFL1
+---
+ backend/index.js                        | 13 +++++++
+ frontend/src/components/dining-menu.tsx | 45 ++++++++++++++++-----
+ frontend/src/lib/mealPeriods.ts         | 52 +++++++++++++++++++++++++
+ 3 files changed, 100 insertions(+), 10 deletions(-)
+ create mode 100644 frontend/src/lib/mealPeriods.ts
+
+diff --git a/backend/index.js b/backend/index.js
+index 5d6704e..b9852f3 100644
+--- a/backend/index.js
++++ b/backend/index.js
+@@ -12,6 +12,7 @@ const {
+   scrapeLocations,
+   scrapeMenu,
+ } = require("./scraper/utkDining");
++const { getAllMenus, getMenu } = require("./menus");
+ 
+ app.use(cors());
+ app.use(express.json());
+@@ -30,6 +31,18 @@ app.get("/api/dining", async (req, res) => {
+     });
+   }
+ });
++// Per-hall breakfast/lunch/dinner menus; the app picks the meal by time of day.
++app.get("/api/menus", (req, res) => res.json(getAllMenus()));
++app.get("/api/menus/:hallId", (req, res) => {
++  const menu = getMenu(req.params.hallId);
++
++  if (!menu) {
++    return res.status(404).json({ error: "Unknown dining hall" });
++  }
++
++  res.json(menu);
++});
++
+ app.use("/api", authRoutes);
+ app.use("/api", crowdRoutes);
+ app.use("/api", reviewRoutes);
+diff --git a/frontend/src/components/dining-menu.tsx b/frontend/src/components/dining-menu.tsx
+index da0181c..ec86749 100644
+--- a/frontend/src/components/dining-menu.tsx
++++ b/frontend/src/components/dining-menu.tsx
+@@ -1,6 +1,10 @@
+ import { useEffect, useState } from "react";
+ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+ import { API_URL } from "../lib/config";
++import { formatMinutes, getCurrentMeal } from "../lib/mealPeriods";
++
++// How often to re-check the clock so the menu flips at meal boundaries.
++const CLOCK_CHECK_MS = 30 * 1000;
+ 
+ type MenuItem = {
+   name: string;
+@@ -20,19 +24,27 @@ const MEAL_LABELS: Record<string, string> = {
+   dinner: "Dinner",
+ };
+ 
+-// Picks the meal that is being served right now, based on the device clock.
+-function currentMeal(available: string[]) {
+-  const hour = new Date().getHours();
+-  const guess = hour < 11 ? "breakfast" : hour < 16 ? "lunch" : "dinner";
+-  return available.includes(guess) ? guess : available[0];
+-}
+-
+ export default function DiningMenu({ hallId, hallName }: { hallId: string; hallName: string }) {
+   const [menu, setMenu] = useState<Menu | null>(null);
+-  const [meal, setMeal] = useState<string>("");
++  // A meal the person tapped manually; cleared whenever the serving period changes.
++  const [pickedMeal, setPickedMeal] = useState<string | null>(null);
++  const [now, setNow] = useState(() => new Date());
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState("");
+ 
++  const current = getCurrentMeal(now);
++
++  // Keep the clock fresh so the menu switches on its own at 10:30, 16:30 and 7:00.
++  useEffect(() => {
++    const timer = setInterval(() => setNow(new Date()), CLOCK_CHECK_MS);
++    return () => clearInterval(timer);
++  }, []);
++
++  // When the serving period changes, go back to showing what is being served.
++  useEffect(() => {
++    setPickedMeal(null);
++  }, [current.meal, current.open]);
++
+   useEffect(() => {
+     let cancelled = false;
+ 
+@@ -43,7 +55,6 @@ export default function DiningMenu({ hallId, hallName }: { hallId: string; hallN
+         const data: Menu = await res.json();
+         if (cancelled) return;
+         setMenu(data);
+-        setMeal(currentMeal(Object.keys(data.meals)));
+       } catch {
+         if (!cancelled) setError("Couldn't load today's menu. Is the backend running?");
+       } finally {
+@@ -58,8 +69,14 @@ export default function DiningMenu({ hallId, hallName }: { hallId: string; hallN
+   }, [hallId]);
+ 
+   const meals = menu ? Object.keys(menu.meals) : [];
++  const servingMeal = meals.includes(current.meal) ? current.meal : meals[0];
++  const meal = pickedMeal && meals.includes(pickedMeal) ? pickedMeal : servingMeal;
+   const items = menu && meal ? menu.meals[meal] : [];
+ 
++  const status = current.open
++    ? `Now serving ${current.period.label} until ${formatMinutes(current.period.end)}`
++    : `Closed right now. ${current.period.label} starts at ${formatMinutes(current.period.start)}`;
++
+   return (
+     <View style={styles.card}>
+       <Text style={styles.heading}>Today's Menu at {hallName}</Text>
+@@ -70,12 +87,14 @@ export default function DiningMenu({ hallId, hallName }: { hallId: string; hallN
+ 
+       {menu && (
+         <>
++          <Text style={styles.status}>{status}</Text>
++
+           <View style={styles.mealRow}>
+             {meals.map((m) => (
+               <TouchableOpacity
+                 key={m}
+                 style={[styles.mealChip, m === meal && styles.mealChipActive]}
+-                onPress={() => setMeal(m)}
++                onPress={() => setPickedMeal(m)}
+               >
+                 <Text style={[styles.mealChipText, m === meal && styles.mealChipTextActive]}>
+                   {MEAL_LABELS[m] ?? m}
+@@ -125,6 +144,12 @@ const styles = StyleSheet.create({
+     fontSize: 14,
+   },
+ 
++  status: {
++    color: "#555",
++    fontSize: 13,
++    marginBottom: 10,
++  },
++
+   mealRow: {
+     flexDirection: "row",
+     marginBottom: 8,
+diff --git a/frontend/src/lib/mealPeriods.ts b/frontend/src/lib/mealPeriods.ts
+new file mode 100644
+index 0000000..d86fa87
+--- /dev/null
++++ b/frontend/src/lib/mealPeriods.ts
+@@ -0,0 +1,52 @@
++// Meal periods used to decide which dining hall menu to show, based on the
++// device's local clock. Times are minutes after midnight; start is inclusive,
++// end is exclusive (so 10:30 is lunch, 16:30 is dinner, 22:00 is closed).
++
++export type MealId = "breakfast" | "lunch" | "dinner";
++
++export type MealPeriod = {
++  id: MealId;
++  label: string;
++  start: number;
++  end: number;
++};
++
++const at = (hours: number, minutes = 0) => hours * 60 + minutes;
++
++export const MEAL_PERIODS: MealPeriod[] = [
++  { id: "breakfast", label: "Breakfast", start: at(7), end: at(10, 30) },
++  { id: "lunch", label: "Lunch", start: at(10, 30), end: at(16, 30) },
++  { id: "dinner", label: "Dinner", start: at(16, 30), end: at(22) },
++];
++
++export type CurrentMeal = {
++  meal: MealId;
++  // true while a meal is actually being served; false overnight (22:00-7:00)
++  open: boolean;
++  period: MealPeriod;
++};
++
++/**
++ * Returns the meal being served at `date`. Outside serving hours the dining
++ * halls are closed, so we return the next meal to be served (always breakfast,
++ * since the closed window runs from dinner's end to breakfast's start).
++ */
++export function getCurrentMeal(date: Date = new Date()): CurrentMeal {
++  const minutes = date.getHours() * 60 + date.getMinutes();
++  const active = MEAL_PERIODS.find((p) => minutes >= p.start && minutes < p.end);
++
++  if (active) {
++    return { meal: active.id, open: true, period: active };
++  }
++
++  return { meal: MEAL_PERIODS[0].id, open: false, period: MEAL_PERIODS[0] };
++}
++
++/** Formats minutes after midnight as e.g. "7:00 AM" or "4:30 PM". */
++export function formatMinutes(total: number): string {
++  const hours24 = Math.floor(total / 60) % 24;
++  const minutes = total % 60;
++  const suffix = hours24 >= 12 ? "PM" : "AM";
++  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
++  return `${hours12}:${String(minutes).padStart(2, "0")} ${suffix}`;
++}
+-- 
+2.43.0
+
