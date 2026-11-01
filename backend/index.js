@@ -61,15 +61,28 @@ app.get("/api/menus/:hallId/current", async (req, res) => {
     const hallId = req.params.hallId;
     const currentMeal = getCurrentMeal();
 
-    if (hallId === "rocky-top") {
-      const menuUrl =
-        "https://dining.utk.edu/vendor/rocky-top-dining-hall/";
+    const liveDiningHalls = {
+      "rocky-top": {
+        name: "Rocky Top",
+        menuUrl:
+          "https://dining.utk.edu/vendor/rocky-top-dining-hall/",
+      },
 
-      const liveMenu = await scrapeMenu(menuUrl);
+      stokely: {
+        name: "Stokely",
+        menuUrl:
+          "https://dining.utk.edu/vendor/stokely-dining-hall/",
+      },
+    };
+
+    if (liveDiningHalls[hallId]) {
+      const hall = liveDiningHalls[hallId];
+
+      const liveMenu = await scrapeMenu(hall.menuUrl);
 
       return res.json({
-        id: "rocky-top",
-        name: "Rocky Top",
+        id: hallId,
+        name: hall.name,
         meal: currentMeal,
         items: liveMenu[currentMeal] || [],
       });
@@ -97,7 +110,7 @@ app.get("/api/menus/:hallId/current", async (req, res) => {
       details: error.message,
     });
   }
-});;
+});
 
 // Full breakfast/lunch/dinner menu for one dining hall
 app.get("/api/menus/:hallId", (req, res) => {
