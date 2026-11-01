@@ -56,24 +56,48 @@ app.get("/api/menus/current-meal", (req, res) => {
 });
 
 // Current meal menu for one dining hall
-app.get("/api/menus/:hallId/current", (req, res) => {
-  const menu = getMenu(req.params.hallId);
+app.get("/api/menus/:hallId/current", async (req, res) => {
+  try {
+    const hallId = req.params.hallId;
+    const currentMeal = getCurrentMeal();
 
-  if (!menu) {
-    return res.status(404).json({
-      error: "Unknown dining hall",
+    if (hallId === "rocky-top") {
+      const menuUrl =
+        "https://dining.utk.edu/vendor/rocky-top-dining-hall/";
+
+      const liveMenu = await scrapeMenu(menuUrl);
+
+      return res.json({
+        id: "rocky-top",
+        name: "Rocky Top",
+        meal: currentMeal,
+        items: liveMenu[currentMeal] || [],
+      });
+    }
+
+    const menu = getMenu(hallId);
+
+    if (!menu) {
+      return res.status(404).json({
+        error: "Unknown dining hall",
+      });
+    }
+
+    res.json({
+      id: menu.id,
+      name: menu.name,
+      meal: currentMeal,
+      items: menu.meals[currentMeal] || [],
+    });
+  } catch (error) {
+    console.error("CURRENT DINING MENU ERROR:", error);
+
+    res.status(500).json({
+      error: "Failed to retrieve current dining hall menu",
+      details: error.message,
     });
   }
-
-  const currentMeal = getCurrentMeal();
-
-  res.json({
-    id: menu.id,
-    name: menu.name,
-    meal: currentMeal,
-    items: menu.meals[currentMeal] || [],
-  });
-});
+});;
 
 // Full breakfast/lunch/dinner menu for one dining hall
 app.get("/api/menus/:hallId", (req, res) => {

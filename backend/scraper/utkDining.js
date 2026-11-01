@@ -145,74 +145,95 @@ async function scrapeRegularMenu(menuUrl) {
   return menu;
 }
 
-async function scrapeDiningHallMenu(menuUrl) {
-  const { chromium } = require("playwright");
+function normalizeDiningHallMenu(menuData) {
+  const meals = {
+    breakfast: [],
+    lunch: [],
+    dinner: [],
+  };
 
-  const browser = await chromium.launch({
-    headless: true,
-  });
+  const subLocations = menuData.subLocations || {};
+
+  for (const subLocation of Object.values(subLocations)) {
+    const category = subLocation.name || "Other";
+    const mealPeriods = subLocation.mealPeriods || {};
+
+    for (const mealPeriod of Object.values(mealPeriods)) {
+      const mealName = mealPeriod.name?.toLowerCase();
+
+      if (!meals[mealName]) {
+        continue;
+      }
+
+      const menuItems = mealPeriod.menuItems || [];
+
+      for (const item of menuItems) {
+        const nutrition = item.nutrition || {};
+
+        const caloriesValue =
+          nutrition.primary_attributes?.calories?.value;
+
+        const calories = caloriesValue
+          ? Number(caloriesValue)
+          : null;
+
+        const dietary = [];
+
+        if (
+          nutrition.dietary_attributes?.vegetarian?.value === "Y"
+        ) {
+          dietary.push("V");
+        }
+
+        if (
+          nutrition.dietary_attributes?.vegan?.value === "Y"
+        ) {
+          dietary.push("VE");
+        }
+
+        meals[mealName].push({
+          id: item.id,
+          name: item.name,
+          category,
+          calories,
+          description: nutrition.description || null,
+          dietary,
+        });
+      }
+    }
+  }
+
+  return meals;
+}
+
+async function scrapeDiningHallMenu(menuUrl) {
+  const response = await axios.get(menuUrl);
+
+  const $ = cheerio.load(response.data);
+
+  const menuElement = $("#sm-dynamic-menu");
+
+  if (!menuElement.length) {
+    throw new Error("Dining hall menu data was not found");
+  }
+
+  const rawData = menuElement.attr("data-data");
+
+  if (!rawData) {
+    throw new Error("Dining hall menu data is empty");
+  }
+
+  let menuData;
 
   try {
-    const page = await browser.newPage();
-
-    page.on("response", async (response) => {
-      const url = response.url().toLowerCase();
-
-      if (
-        url.includes("json") ||
-        url.includes("api") ||
-        url.includes("menu") ||
-        url.includes("vendor") ||
-        url.includes("graphql")
-      ) {
-        console.log(
-          "RESPONSE:",
-          response.status(),
-          response.url()
-        );
-      }
-    });
-
-    await page.goto(menuUrl, {
-      waitUntil: "networkidle",
-      timeout: 30000,
-    });
-
-    await page.waitForTimeout(3000);
-
-    console.log("\n=== SCRIPT SOURCES ===");
-
-    const scripts = await page
-      .locator("script")
-      .evaluateAll((elements) =>
-        elements.map((script) => ({
-          src: script.src || null,
-          text: script.src
-            ? null
-            : script.textContent?.slice(0, 500),
-        }))
-      );
-
-    console.log(scripts);
-
-    console.log("\n=== PAGE HTML AROUND MENU ===");
-
-    const menuHtml = await page.evaluate(() => {
-      const menu = document.querySelector("#menu");
-
-      if (!menu) {
-        return "NO #menu ELEMENT FOUND";
-      }
-
-      return menu.outerHTML;
-    });
-
-    console.log(menuHtml);
-
-    return [];
-  } finally {
-    await browser.close();
+    menuData = JSON.parse(rawData);
+  } catch (error) {
+    throw new Error("Failed to parse dining hall menu data");
   }
+
+  console.log("DINING HALL MENU LOADED");
+
+  return normalizeDiningHallMenu(menuData);
 }
 module.exports = {
   scrapeLocations,
