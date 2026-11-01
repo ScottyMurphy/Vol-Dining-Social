@@ -20,6 +20,37 @@ type MenuItem = {
   dietary: string[];
 };
 
+type GroupedMenu = {
+  breakfast?: MenuItem[];
+  lunch?: MenuItem[];
+  dinner?: MenuItem[];
+};
+
+const MEAL_LABELS: Record<string, string> = {
+  breakfast: "Breakfast",
+  lunch: "Lunch",
+  dinner: "Dinner",
+};
+
+function groupItemsByCategory(items: MenuItem[]) {
+  const groups: Record<string, MenuItem[]> = {};
+
+  for (const item of items) {
+    const category = item.category?.trim() || "Other";
+
+    if (!groups[category]) {
+      groups[category] = [];
+    }
+
+    groups[category].push(item);
+  }
+
+  return Object.entries(groups).map(([category, items]) => ({
+    category,
+    items,
+  }));
+}
+
 export default function Menu() {
   const { name, menuUrl } = useLocalSearchParams<{
     name: string;
@@ -27,7 +58,11 @@ export default function Menu() {
   }>();
 
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [groupedMenu, setGroupedMenu] = useState<GroupedMenu | null>(null);
+  const [selectedMeal, setSelectedMeal] = useState("breakfast");
   const [loading, setLoading] = useState(true);
+
+  const groupedItems = groupItemsByCategory(items);
 
   useEffect(() => {
     if (!menuUrl) {
@@ -35,23 +70,38 @@ export default function Menu() {
       return;
     }
 
-    fetch(
-      `${API_URL}/api/menu?url=${encodeURIComponent(menuUrl)}`
-    )
+    fetch(`${API_URL}/api/menu?url=${encodeURIComponent(menuUrl)}`)
       .then((response) => response.json())
       .then((data) => {
         console.log("MENU DATA:", data);
 
+        // Regular dining location:
+        // [
+        //   { name, category, price, ... }
+        // ]
         if (Array.isArray(data)) {
+          setGroupedMenu(null);
           setItems(data);
           return;
         }
 
+        // Dining hall:
+        // {
+        //   breakfast: [...],
+        //   lunch: [...],
+        //   dinner: [...]
+        // }
         if (
           data &&
           typeof data === "object" &&
-          ("breakfast" in data || "lunch" in data || "dinner" in data)
+          ("breakfast" in data ||
+            "lunch" in data ||
+            "dinner" in data)
         ) {
+          const menuData: GroupedMenu = data;
+
+          setGroupedMenu(menuData);
+
           const hour = new Date().getHours();
 
           let currentMeal = "dinner";
@@ -62,7 +112,35 @@ export default function Menu() {
             currentMeal = "lunch";
           }
 
-          setItems(data[currentMeal] || []);
+          // If the current meal exists, show it first.
+          if (
+            menuData[currentMeal as keyof GroupedMenu]?.length
+          ) {
+            setSelectedMeal(currentMeal);
+            setItems(
+              menuData[currentMeal as keyof GroupedMenu] ?? []
+            );
+          } else {
+            // Otherwise use the first meal that has items.
+            const firstMeal = [
+              "breakfast",
+              "lunch",
+              "dinner",
+            ].find(
+              (meal) =>
+                menuData[meal as keyof GroupedMenu]?.length
+            );
+
+            if (firstMeal) {
+              setSelectedMeal(firstMeal);
+              setItems(
+                menuData[firstMeal as keyof GroupedMenu] ?? []
+              );
+            } else {
+              setItems([]);
+            }
+          }
+
           return;
         }
 
@@ -70,17 +148,31 @@ export default function Menu() {
       })
       .catch((error) => {
         console.error("Failed to load menu:", error);
+        setItems([]);
       })
       .finally(() => {
         setLoading(false);
       });
   }, [menuUrl]);
 
+  function selectMeal(meal: string) {
+    if (!groupedMenu) {
+      return;
+    }
+
+    setSelectedMeal(meal);
+    setItems(
+      groupedMenu[meal as keyof GroupedMenu] ?? []
+    );
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />
-        <Text style={styles.loading}>Loading menu...</Text>
+        <Text style={styles.loading}>
+          Loading menu...
+        </Text>
       </View>
     );
   }
@@ -88,51 +180,111 @@ export default function Menu() {
   return (
     <View style={styles.container}>
       <TouchableOpacity onPress={() => router.back()}>
-        <Text style={styles.back}>← Back</Text>
+        <Text style={styles.back}>
+          ← Back
+        </Text>
       </TouchableOpacity>
 
-      <Text style={styles.title}>{name}</Text>
+      <Text style={styles.title}>
+        {name}
+      </Text>
+
+      {groupedMenu && (
+        <View style={styles.mealRow}>
+          {["breakfast", "lunch", "dinner"].map(
+            (meal) => {
+              const mealItems =
+                groupedMenu[
+                  meal as keyof GroupedMenu
+                ] ?? [];
+
+              return (
+                <TouchableOpacity
+                  key={meal}
+                  style={[
+                    styles.mealChip,
+                    selectedMeal === meal &&
+                      styles.mealChipActive,
+                  ]}
+                  onPress={() => selectMeal(meal)}
+                  disabled={mealItems.length === 0}
+                >
+                  <Text
+                    style={[
+                      styles.mealChipText,
+                      selectedMeal === meal &&
+                        styles.mealChipTextActive,
+                      mealItems.length === 0 &&
+                        styles.mealChipTextDisabled,
+                    ]}
+                  >
+                    {MEAL_LABELS[meal]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }
+          )}
+        </View>
+      )}
 
       <FlatList
-        data={items}
-        keyExtractor={(item, index) =>
-          `${item.name}-${index}`
-        }
+        data={groupedItems}
+        keyExtractor={(group) => group.category}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.row}>
-              <Text style={styles.itemName}>
-                {item.name}
+        renderItem={({ item: group }) => (
+          <View>
+            <View style={styles.stationHeader}>
+              <Text style={styles.stationHeaderText}>
+                {group.category}
               </Text>
-
-              {item.price && (
-                <Text style={styles.price}>
-                  {item.price}
-                </Text>
-              )}
-              {item.calories !== undefined && item.calories !== null && (
-                <Text style={styles.price}>
-                  {item.calories} cal
-                </Text>
-              )}
             </View>
 
-            <Text style={styles.category}>
-              {item.category}
-            </Text>
+            {group.items.map((item, index) => (
+              <View
+                style={styles.card}
+                key={`${group.category}-${item.name}-${index}`}
+              >
+                <View style={styles.row}>
+                  <Text style={styles.itemName}>
+                    {item.name}
+                  </Text>
 
-            {item.description ? (
-              <Text style={styles.description}>
-                {item.description}
-              </Text>
-            ) : null}
+                  {item.price && (
+                    <Text style={styles.price}>
+                      {item.price}
+                    </Text>
+                  )}
 
-            {item.dietary.length > 0 && (
-              <Text style={styles.dietary}>
-                {item.dietary.join(" • ")}
-              </Text>
-            )}
+                  {item.calories !== undefined &&
+                    item.calories !== null && (
+                      <Text style={styles.calories}>
+                        {item.calories} cal
+                      </Text>
+                    )}
+                </View>
+
+                {item.description &&
+                item.description !== "N/A" ? (
+                  <Text style={styles.description}>
+                    {item.description}
+                  </Text>
+                ) : null}
+
+                {item.dietary.length > 0 && (
+                  <Text style={styles.dietary}>
+                    {item.dietary
+                      .map((tag) =>
+                        tag === "VE"
+                          ? "Vegan"
+                          : tag === "V"
+                          ? "Vegetarian"
+                          : tag
+                      )
+                      .join(" • ")}
+                  </Text>
+                )}
+              </View>
+            ))}
           </View>
         )}
         ListEmptyComponent={
@@ -177,6 +329,37 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
+  mealRow: {
+    flexDirection: "row",
+    marginBottom: 20,
+  },
+
+  mealChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: "#EAEAEA",
+    marginRight: 8,
+  },
+
+  mealChipActive: {
+    backgroundColor: "#FF8200",
+  },
+
+  mealChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#555",
+  },
+
+  mealChipTextActive: {
+    color: "white",
+  },
+
+  mealChipTextDisabled: {
+    color: "#AAA",
+  },
+
   list: {
     paddingBottom: 60,
   },
@@ -206,6 +389,12 @@ const styles = StyleSheet.create({
     color: "#FF8200",
   },
 
+  calories: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+
   category: {
     marginTop: 4,
     color: "#888",
@@ -230,4 +419,19 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 40,
   },
+  stationHeader: {
+  backgroundColor: "#FF8200",
+  paddingVertical: 10,
+  paddingHorizontal: 14,
+  borderRadius: 10,
+  marginTop: 12,
+  marginBottom: 8,
+  },
+
+  stationHeaderText: {
+    color: "white",
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  
 });
