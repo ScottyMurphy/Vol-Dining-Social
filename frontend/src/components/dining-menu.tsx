@@ -1,21 +1,35 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { API_URL } from "../lib/config";
-import { DINING_HALLS, describeHallState, getHallState } from "../lib/mealPeriods";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-// How often to re-check the clock so the menu flips at meal boundaries.
+import { API_URL } from "../lib/config";
+import {
+  DINING_HALLS,
+  describeHallState,
+  getHallState,
+} from "../lib/mealPeriods";
+
+// Re-check the clock so the hall status updates automatically.
 const CLOCK_CHECK_MS = 30 * 1000;
 
 type MenuItem = {
+  id?: string;
   name: string;
   category: string;
-  calories: number;
+  calories: number | null;
+  description?: string | null;
+  dietary?: string[];
 };
 
-type Menu = {
+type CurrentMenu = {
   id: string;
   name: string;
-  meals: Record<string, MenuItem[]>;
+  meal: string;
+  items: MenuItem[];
 };
 
 const MEAL_LABELS: Record<string, string> = {
@@ -24,94 +38,161 @@ const MEAL_LABELS: Record<string, string> = {
   dinner: "Dinner",
 };
 
-export default function DiningMenu({ hallId, hallName }: { hallId: string; hallName: string }) {
-  const [menu, setMenu] = useState<Menu | null>(null);
-  // A meal the person tapped manually; cleared whenever the serving period changes.
-  const [pickedMeal, setPickedMeal] = useState<string | null>(null);
+export default function DiningMenu({
+  hallId,
+  hallName,
+}: {
+  hallId: string;
+  hallName: string;
+}) {
+  const [menu, setMenu] = useState<CurrentMenu | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // This hall's state right now, from its own hours for today (see mealPeriods.ts).
   const hall = DINING_HALLS.find((h) => h.id === hallId);
   const state = hall ? getHallState(hall, now) : null;
 
-  // Keep the clock fresh so the menu switches on its own when a meal period changes.
+  // Keep the hall status current.
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), CLOCK_CHECK_MS);
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, CLOCK_CHECK_MS);
+
     return () => clearInterval(timer);
   }, []);
-
-  // When the serving period changes, go back to showing what is being served.
-  useEffect(() => {
-    setPickedMeal(null);
-  }, [state?.meal, state?.open]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadMenu() {
       try {
-        const res = await fetch(`${API_URL}/api/menus/${hallId}`);
-        if (!res.ok) throw new Error("Could not load the menu");
-        const data: Menu = await res.json();
-        if (cancelled) return;
+        setLoading(true);
+        setError("");
+
+        const res = await fetch(
+          `${API_URL}/api/menus/${hallId}/current`
+        );
+
+        if (!res.ok) {
+          throw new Error("Could not load the menu");
+        }
+
+        const data: CurrentMenu = await res.json();
+
+        console.log("LIVE MENU RESPONSE:", data);
+
+        if (cancelled) {
+          return;
+        }
+
         setMenu(data);
-      } catch {
-        if (!cancelled) setError("Couldn't load today's menu. Is the backend running?");
+      } catch (error) {
+        console.error("DINING MENU ERROR:", error);
+
+        if (!cancelled) {
+          setError(
+            "Couldn't load today's menu. Is the backend running?"
+          );
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
     loadMenu();
+
     return () => {
       cancelled = true;
     };
   }, [hallId]);
 
-  const meals = menu ? Object.keys(menu.meals) : [];
-  const servingMeal = state?.meal && meals.includes(state.meal) ? state.meal : meals[0];
-  const meal = pickedMeal && meals.includes(pickedMeal) ? pickedMeal : servingMeal;
-  const items = menu && meal ? menu.meals[meal] : [];
-
   const status = state ? describeHallState(state) : "";
 
   return (
     <View style={styles.card}>
-      <Text style={styles.heading}>Today's Menu at {hallName}</Text>
+      <Text style={styles.heading}>
+        Today's Menu at {hallName}
+      </Text>
 
-      {loading && <ActivityIndicator color="#FF8200" style={styles.spinner} />}
+      {loading && (
+        <ActivityIndicator
+          color="#FF8200"
+          style={styles.spinner}
+        />
+      )}
 
-      {!!error && <Text style={styles.error}>{error}</Text>}
+      {!!error && (
+        <Text style={styles.error}>
+          {error}
+        </Text>
+      )}
 
-      {menu && (
+      {menu && !loading && (
         <>
-          {!!status && <Text style={styles.status}>{status}</Text>}
+          {!!status && (
+            <Text style={styles.status}>
+              {status}
+            </Text>
+          )}
 
-          <View style={styles.mealRow}>
-            {meals.map((m) => (
-              <TouchableOpacity
-                key={m}
-                style={[styles.mealChip, m === meal && styles.mealChipActive]}
-                onPress={() => setPickedMeal(m)}
-              >
-                <Text style={[styles.mealChipText, m === meal && styles.mealChipTextActive]}>
-                  {MEAL_LABELS[m] ?? m}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.mealHeader}>
+            <Text style={styles.mealLabel}>
+              {MEAL_LABELS[menu.meal] ?? menu.meal}
+            </Text>
           </View>
 
-          {items.map((item) => (
-            <View style={styles.itemRow} key={`${meal}-${item.name}`}>
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemCategory}>{item.category}</Text>
+          {menu.items.length === 0 ? (
+            <Text style={styles.empty}>
+              No menu items available for this meal.
+            </Text>
+          ) : (
+            menu.items.map((item) => (
+              <View
+                style={styles.itemRow}
+                key={item.id ?? `${menu.meal}-${item.category}-${item.name}`}
+              >
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemName}>
+                    {item.name}
+                  </Text>
+
+                  <Text style={styles.itemCategory}>
+                    {item.category}
+                  </Text>
+
+                  {!!item.description &&
+                    item.description !== "N/A" && (
+                      <Text style={styles.itemDescription}>
+                        {item.description}
+                      </Text>
+                    )}
+
+                  {!!item.dietary?.length && (
+                    <Text style={styles.dietary}>
+                      {item.dietary
+                        .map((tag) =>
+                          tag === "VE"
+                            ? "Vegan"
+                            : tag === "V"
+                            ? "Vegetarian"
+                            : tag
+                        )
+                        .join(" • ")}
+                    </Text>
+                  )}
+                </View>
+
+                <Text style={styles.itemCalories}>
+                  {item.calories !== null
+                    ? `${item.calories} cal`
+                    : "—"}
+                </Text>
               </View>
-              <Text style={styles.itemCalories}>{item.calories} cal</Text>
-            </View>
-          ))}
+            ))
+          )}
         </>
       )}
     </View>
@@ -150,37 +231,31 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  mealRow: {
-    flexDirection: "row",
+  mealHeader: {
+    alignSelf: "flex-start",
+    backgroundColor: "#FF8200",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     marginBottom: 8,
   },
 
-  mealChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: "#F7F7F7",
-    marginRight: 8,
-  },
-
-  mealChipActive: {
-    backgroundColor: "#FF8200",
-  },
-
-  mealChipText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#555",
-  },
-
-  mealChipTextActive: {
+  mealLabel: {
     color: "white",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  empty: {
+    color: "#777",
+    fontSize: 14,
+    paddingVertical: 12,
   },
 
   itemRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: "#F0F0F0",
@@ -201,6 +276,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#777",
     marginTop: 2,
+  },
+
+  itemDescription: {
+    fontSize: 12,
+    color: "#555",
+    marginTop: 4,
+    lineHeight: 17,
+  },
+
+  dietary: {
+    fontSize: 12,
+    color: "#2E7D32",
+    fontWeight: "600",
+    marginTop: 4,
   },
 
   itemCalories: {

@@ -14,8 +14,9 @@ import { API_URL } from "../lib/config";
 type MenuItem = {
   category: string;
   name: string;
-  description: string;
-  price: string | null;
+  description?: string | null;
+  price?: string | null;
+  calories?: number | null;
   dietary: string[];
 };
 
@@ -40,7 +41,32 @@ export default function Menu() {
       .then((response) => response.json())
       .then((data) => {
         console.log("MENU DATA:", data);
-        setItems(data);
+
+        if (Array.isArray(data)) {
+          setItems(data);
+          return;
+        }
+
+        if (
+          data &&
+          typeof data === "object" &&
+          ("breakfast" in data || "lunch" in data || "dinner" in data)
+        ) {
+          const hour = new Date().getHours();
+
+          let currentMeal = "dinner";
+
+          if (hour < 11) {
+            currentMeal = "breakfast";
+          } else if (hour < 17) {
+            currentMeal = "lunch";
+          }
+
+          setItems(data[currentMeal] || []);
+          return;
+        }
+
+        setItems([]);
       })
       .catch((error) => {
         console.error("Failed to load menu:", error);
@@ -83,6 +109,11 @@ export default function Menu() {
               {item.price && (
                 <Text style={styles.price}>
                   {item.price}
+                </Text>
+              )}
+              {item.calories !== undefined && item.calories !== null && (
+                <Text style={styles.price}>
+                  {item.calories} cal
                 </Text>
               )}
             </View>
