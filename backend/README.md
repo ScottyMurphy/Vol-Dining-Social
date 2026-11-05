@@ -31,3 +31,20 @@ login token in a `Bearer` authorization header. A user's ratings are updated
 when they submit again. `GET /api/reviews/:locationId` returns the average
 cleanliness and service ratings, the review count, and the signed-in user's
 ratings.
+
+## Food preferences
+
+Signed-in users can retrieve their saved preferences from `GET /api/preferences`
+and update them with `PUT /api/preferences` using a `Bearer` authorization
+header. Send both arrays in the request body, for example:
+
+```json
+{
+  "dietary": ["vegan", "low_calorie"],
+  "allergen": ["gluten_free"]
+}
+```
+
+Supported dietary values are `low_calorie`, `vegan`, and `vegetarian`.
+Supported allergen values are `gluten_free`. Preferences are stored with the
+user's account.

@@ -33,4 +33,13 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category TEXT NOT NULL CHECK (category IN ('dietary', 'allergen')),
+    preference TEXT NOT NULL,
+    PRIMARY KEY (user_id, category, preference)
+  )
+`);
+
 module.exports = db;

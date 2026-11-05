@@ -15,11 +15,15 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     setError("");
     setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
       const res = await fetch(`${API_URL}/api/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok) {
@@ -28,8 +32,13 @@ export default function LoginScreen() {
       }
       await signIn(data.token);
     } catch {
-      setError("Can't reach the server. Is the backend running?");
+      setError(
+        controller.signal.aborted
+          ? "Login timed out. Check that the backend is running and your phone is on the same Wi-Fi network."
+          : "Can't reach the server. Is the backend running?"
+      );
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };

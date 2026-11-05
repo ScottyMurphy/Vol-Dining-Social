@@ -12,6 +12,12 @@ import {
   describeHallState,
   getHallState,
 } from "../lib/mealPeriods";
+import {
+  fetchUserPreferences,
+  getPreferenceMatchLabels,
+  type UserPreferences,
+} from "../lib/dietaryPreferences";
+import { useAuth } from "../context/AuthContext";
 
 // Re-check the clock so the hall status updates automatically.
 const CLOCK_CHECK_MS = 30 * 1000;
@@ -45,10 +51,16 @@ export default function DiningMenu({
   hallId: string;
   hallName: string;
 }) {
+  const { token } = useAuth();
   const [menu, setMenu] = useState<CurrentMenu | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [preferences, setPreferences] = useState<UserPreferences>({
+    dietary: [],
+    allergen: [],
+  });
+  const [preferencesError, setPreferencesError] = useState("");
 
   const hall = DINING_HALLS.find((h) => h.id === hallId);
   const state = hall ? getHallState(hall, now) : null;
@@ -61,6 +73,38 @@ export default function DiningMenu({
 
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPreferences() {
+      if (!token) {
+        setPreferencesError("Sign in to see menu matches for your preferences.");
+        return;
+      }
+
+      try {
+        const userPreferences = await fetchUserPreferences(token);
+        if (!cancelled) {
+          setPreferences(userPreferences);
+          setPreferencesError("");
+        }
+      } catch (preferenceError) {
+        if (!cancelled) {
+          setPreferencesError(
+            preferenceError instanceof Error
+              ? preferenceError.message
+              : "Couldn't load your preferences, so menu matches aren't highlighted.",
+          );
+        }
+      }
+    }
+
+    void loadPreferences();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,6 +181,9 @@ export default function DiningMenu({
               {status}
             </Text>
           )}
+          {!!preferencesError && (
+            <Text style={styles.preferencesError}>{preferencesError}</Text>
+          )}
 
           <View style={styles.mealHeader}>
             <Text style={styles.mealLabel}>
@@ -149,49 +196,60 @@ export default function DiningMenu({
               No menu items available for this meal.
             </Text>
           ) : (
-            menu.items.map((item) => (
-              <View
-                style={styles.itemRow}
-                key={item.id ?? `${menu.meal}-${item.category}-${item.name}`}
-              >
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemName}>
-                    {item.name}
-                  </Text>
-
-                  <Text style={styles.itemCategory}>
-                    {item.category}
-                  </Text>
-
-                  {!!item.description &&
-                    item.description !== "N/A" && (
-                      <Text style={styles.itemDescription}>
-                        {item.description}
+            menu.items.map((item) => {
+              const matches = getPreferenceMatchLabels(item, preferences);
+              return (
+                <View
+                  style={[
+                    styles.itemRow,
+                    matches.length > 0 && styles.itemRowMatched,
+                  ]}
+                  key={item.id ?? `${menu.meal}-${item.category}-${item.name}`}
+                >
+                  <View style={styles.itemInfo}>
+                    <Text style={styles.itemName}>
+                      {item.name}
+                    </Text>
+                    {matches.length > 0 && (
+                      <Text style={styles.matchLabel}>
+                        Matches: {matches.join(" · ")}
                       </Text>
                     )}
 
-                  {!!item.dietary?.length && (
-                    <Text style={styles.dietary}>
-                      {item.dietary
-                        .map((tag) =>
-                          tag === "VE"
-                            ? "Vegan"
-                            : tag === "V"
-                            ? "Vegetarian"
-                            : tag
-                        )
-                        .join(" • ")}
+                    <Text style={styles.itemCategory}>
+                      {item.category}
                     </Text>
-                  )}
-                </View>
 
-                <Text style={styles.itemCalories}>
-                  {item.calories !== null
-                    ? `${item.calories} cal`
-                    : "—"}
-                </Text>
-              </View>
-            ))
+                    {!!item.description &&
+                      item.description !== "N/A" && (
+                        <Text style={styles.itemDescription}>
+                          {item.description}
+                        </Text>
+                      )}
+
+                    {!!item.dietary?.length && (
+                      <Text style={styles.dietary}>
+                        {item.dietary
+                          .map((tag) =>
+                            tag === "VE"
+                              ? "Vegan"
+                              : tag === "V"
+                                ? "Vegetarian"
+                                : tag,
+                          )
+                          .join(" • ")}
+                      </Text>
+                    )}
+                  </View>
+
+                  <Text style={styles.itemCalories}>
+                    {item.calories !== null
+                      ? `${item.calories} cal`
+                      : "—"}
+                  </Text>
+                </View>
+              );
+            })
           )}
         </>
       )}
@@ -223,6 +281,12 @@ const styles = StyleSheet.create({
   error: {
     color: "#B00020",
     fontSize: 14,
+  },
+
+  preferencesError: {
+    color: "#8A5A00",
+    fontSize: 13,
+    marginBottom: 10,
   },
 
   status: {
@@ -259,6 +323,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: "#F0F0F0",
+  },
+
+  itemRowMatched: {
+    backgroundColor: "#E8F5E9",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+  },
+
+  matchLabel: {
+    color: "#2E7D32",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 3,
   },
 
   itemInfo: {

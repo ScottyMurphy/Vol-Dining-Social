@@ -10,6 +10,12 @@ import {
 } from "react-native";
 
 import { API_URL } from "../lib/config";
+import { useAuth } from "../context/AuthContext";
+import {
+  fetchUserPreferences,
+  getPreferenceMatchLabels,
+  type UserPreferences,
+} from "../lib/dietaryPreferences";
 
 type MenuItem = {
   category: string;
@@ -17,7 +23,7 @@ type MenuItem = {
   description?: string | null;
   price?: string | null;
   calories?: number | null;
-  dietary: string[];
+  dietary?: string[];
 };
 
 type GroupedMenu = {
@@ -52,6 +58,7 @@ function groupItemsByCategory(items: MenuItem[]) {
 }
 
 export default function Menu() {
+  const { token } = useAuth();
   const { name, menuUrl } = useLocalSearchParams<{
     name: string;
     menuUrl: string;
@@ -61,8 +68,45 @@ export default function Menu() {
   const [groupedMenu, setGroupedMenu] = useState<GroupedMenu | null>(null);
   const [selectedMeal, setSelectedMeal] = useState("breakfast");
   const [loading, setLoading] = useState(true);
+  const [preferences, setPreferences] = useState<UserPreferences>({
+    dietary: [],
+    allergen: [],
+  });
+  const [preferencesError, setPreferencesError] = useState("");
 
   const groupedItems = groupItemsByCategory(items);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPreferences() {
+      if (!token) {
+        setPreferencesError("Sign in to see menu matches for your preferences.");
+        return;
+      }
+
+      try {
+        const userPreferences = await fetchUserPreferences(token);
+        if (!cancelled) {
+          setPreferences(userPreferences);
+          setPreferencesError("");
+        }
+      } catch (preferenceError) {
+        if (!cancelled) {
+          setPreferencesError(
+            preferenceError instanceof Error
+              ? preferenceError.message
+              : "Couldn't load your preferences, so menu matches aren't highlighted.",
+          );
+        }
+      }
+    }
+
+    void loadPreferences();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   useEffect(() => {
     if (!menuUrl) {
@@ -188,6 +232,9 @@ export default function Menu() {
       <Text style={styles.title}>
         {name}
       </Text>
+      {!!preferencesError && (
+        <Text style={styles.preferencesError}>{preferencesError}</Text>
+      )}
 
       {groupedMenu && (
         <View style={styles.mealRow}>
@@ -239,52 +286,64 @@ export default function Menu() {
               </Text>
             </View>
 
-            {group.items.map((item, index) => (
-              <View
-                style={styles.card}
-                key={`${group.category}-${item.name}-${index}`}
-              >
-                <View style={styles.row}>
-                  <Text style={styles.itemName}>
-                    {item.name}
-                  </Text>
+            {group.items.map((item, index) => {
+              const matches = getPreferenceMatchLabels(item, preferences);
+              return (
+                <View
+                  style={[
+                    styles.card,
+                    matches.length > 0 && styles.cardMatched,
+                  ]}
+                  key={`${group.category}-${item.name}-${index}`}
+                >
+                  <View style={styles.row}>
+                    <Text style={styles.itemName}>
+                      {item.name}
+                    </Text>
 
-                  {item.price && (
-                    <Text style={styles.price}>
-                      {item.price}
+                    {item.price && (
+                      <Text style={styles.price}>
+                        {item.price}
+                      </Text>
+                    )}
+
+                    {item.calories !== undefined &&
+                      item.calories !== null && (
+                        <Text style={styles.calories}>
+                          {item.calories} cal
+                        </Text>
+                      )}
+                  </View>
+
+                  {matches.length > 0 && (
+                    <Text style={styles.matchLabel}>
+                      Matches: {matches.join(" · ")}
                     </Text>
                   )}
 
-                  {item.calories !== undefined &&
-                    item.calories !== null && (
-                      <Text style={styles.calories}>
-                        {item.calories} cal
-                      </Text>
-                    )}
+                  {item.description &&
+                  item.description !== "N/A" ? (
+                    <Text style={styles.description}>
+                      {item.description}
+                    </Text>
+                  ) : null}
+
+                  {!!item.dietary?.length && (
+                    <Text style={styles.dietary}>
+                      {item.dietary
+                        .map((tag) =>
+                          tag === "VE"
+                            ? "Vegan"
+                            : tag === "V"
+                              ? "Vegetarian"
+                              : tag,
+                        )
+                        .join(" • ")}
+                    </Text>
+                  )}
                 </View>
-
-                {item.description &&
-                item.description !== "N/A" ? (
-                  <Text style={styles.description}>
-                    {item.description}
-                  </Text>
-                ) : null}
-
-                {item.dietary.length > 0 && (
-                  <Text style={styles.dietary}>
-                    {item.dietary
-                      .map((tag) =>
-                        tag === "VE"
-                          ? "Vegan"
-                          : tag === "V"
-                          ? "Vegetarian"
-                          : tag
-                      )
-                      .join(" • ")}
-                  </Text>
-                )}
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
         ListEmptyComponent={
@@ -329,6 +388,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
+  preferencesError: {
+    color: "#8A5A00",
+    fontSize: 13,
+    marginBottom: 10,
+  },
+
   mealRow: {
     flexDirection: "row",
     marginBottom: 20,
@@ -369,6 +434,19 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 14,
     marginBottom: 12,
+  },
+
+  cardMatched: {
+    backgroundColor: "#E8F5E9",
+    borderWidth: 1,
+    borderColor: "#A5D6A7",
+  },
+
+  matchLabel: {
+    marginTop: 8,
+    color: "#2E7D32",
+    fontSize: 13,
+    fontWeight: "700",
   },
 
   row: {
@@ -433,5 +511,4 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "800",
   },
-  
 });
