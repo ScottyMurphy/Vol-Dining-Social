@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
+import { COLORS } from "../lib/theme";
 
 type CrowdLevel = "low" | "medium" | "high" | "very-high";
 
@@ -7,27 +8,27 @@ type Props = {
   crowdLevel: CrowdLevel | null;
 };
 
-const LEVELS: { value: CrowdLevel; label: string; color: string }[] = [
-  { value: "low", label: "Not busy", color: "#2E9D55" },
-  { value: "medium", label: "Somewhat busy", color: "#9DBD35" },
-  { value: "high", label: "Busy", color: "#F0A326" },
-  { value: "very-high", label: "Very busy", color: "#D94343" },
+const LEVELS: { value: CrowdLevel; label: string }[] = [
+  { value: "low", label: "Not busy" },
+  { value: "medium", label: "Somewhat busy" },
+  { value: "high", label: "Busy" },
+  { value: "very-high", label: "Very busy" },
 ];
 
 export default function CrowdMeterCard({ locationName, crowdLevel }: Props) {
   const currentLevel = LEVELS.find((level) => level.value === crowdLevel);
+  const filled = currentLevel ? LEVELS.indexOf(currentLevel) + 1 : 0;
 
   return (
     <View style={styles.card}>
       <Text style={styles.title}>{locationName}</Text>
       <View style={styles.meter}>
-        {LEVELS.map((level) => (
+        {LEVELS.map((level, index) => (
           <View
             key={level.value}
             style={[
               styles.segment,
-              { backgroundColor: level.color },
-              crowdLevel === level.value && styles.activeSegment,
+              { backgroundColor: index < filled ? COLORS.smokey : COLORS.meterEmpty },
             ]}
           />
         ))}
@@ -61,12 +62,8 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
-    height: 10,
-    borderRadius: 5,
-    opacity: 0.28,
-  },
-  activeSegment: {
-    opacity: 1,
+    height: 8,
+    borderRadius: 4,
   },
   crowdText: {
     fontSize: 16,

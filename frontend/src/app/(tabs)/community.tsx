@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import {
@@ -19,11 +18,15 @@ import {
 } from "react-native";
 import { API_URL } from "../../lib/config";
 import { useAuth } from "../../context/AuthContext";
+import { fetchCurrentDishes } from "../../lib/dishRatings";
+import { COLORS, RADIUS, SPACING, TYPE } from "../../lib/theme";
 
-const ORANGE = "#FF8200";
+const ORANGE = COLORS.orange;
 const MAX_POST_LENGTH = 280;
 const MAX_REPLY_LENGTH = 200;
-const BANNER = require("../../../assets/images/community-banner.jpg");
+
+// Optional dish rating on a post
+type DishReview = { name: string; rating: "up" | "down" };
 
 type Post = {
   id: number;
@@ -35,6 +38,7 @@ type Post = {
   image: string | null; // photo id, or null if no photo
   tag: TagId | null;
   poll: Poll | null;
+  dish: DishReview | null;
   replyCount: number;
 };
 
@@ -44,7 +48,7 @@ type Poll = {
   myChoice: number | null; // the option id this user picked
 };
 
-type Reply = Omit<Post, "replyCount" | "tag" | "poll"> & { isOP: boolean };
+type Reply = Omit<Post, "replyCount" | "tag" | "poll" | "dish"> & { isOP: boolean };
 
 // Dining hall tags (same ids the crowd meter and service reviews use)
 const TAGS = [
@@ -55,6 +59,7 @@ const TAGS = [
 ] as const;
 type TagId = (typeof TAGS)[number]["id"];
 const findTag = (id: TagId | null) => TAGS.find((t) => t.id === id);
+const isHallTag = (id: TagId | null) => id !== null && id !== "general";
 
 const MAX_POLL_OPTIONS = 4;
 const MAX_POLL_OPTION_LENGTH = 50;
@@ -134,15 +139,15 @@ function VoteButtons({
         hitSlop={8}
         onPress={() => onVote(myVote === 1 ? 0 : 1)}
       >
-        <Ionicons name="chevron-up" size={26} color={myVote === 1 ? ORANGE : "#999"} />
+        <Ionicons name="chevron-up" size={26} color={myVote === 1 ? COLORS.orangeText : COLORS.faint} />
       </TouchableOpacity>
-      <Text style={[styles.score, myVote !== 0 && { color: ORANGE }]}>{score}</Text>
+      <Text style={[styles.score, myVote !== 0 && { color: COLORS.orangeText }]}>{score}</Text>
       <TouchableOpacity
         accessibilityLabel="Downvote"
         hitSlop={8}
         onPress={() => onVote(myVote === -1 ? 0 : -1)}
       >
-        <Ionicons name="chevron-down" size={26} color={myVote === -1 ? ORANGE : "#999"} />
+        <Ionicons name="chevron-down" size={26} color={myVote === -1 ? COLORS.orangeText : COLORS.faint} />
       </TouchableOpacity>
     </View>
   );
@@ -154,10 +159,26 @@ function TagPill({ tag, onPress }: { tag: TagId | null; onPress?: () => void }) 
   if (!info) return null;
   return (
     <TouchableOpacity disabled={!onPress} onPress={onPress} style={styles.tagPill}>
-      <Text style={styles.tagPillText}>
-        {info.emoji} {info.label}
-      </Text>
+      <Text style={styles.tagPillText}>{info.label}</Text>
     </TouchableOpacity>
+  );
+}
+
+// ---------- "Liked the BBQ turkey panini" badge on a post ----------
+function DishBadge({ dish }: { dish: DishReview | null }) {
+  if (!dish) return null;
+  const liked = dish.rating === "up";
+  return (
+    <View style={[styles.dishBadge, liked ? styles.dishBadgeUp : styles.dishBadgeDown]}>
+      <Ionicons
+        name={liked ? "thumbs-up-outline" : "thumbs-down-outline"}
+        size={14}
+        color={liked ? COLORS.success : COLORS.textSecondary}
+      />
+      <Text style={[styles.dishBadgeText, { color: liked ? COLORS.success : COLORS.textSecondary }]}>
+        {liked ? "Liked" : "Not a fan of"} the {dish.name}
+      </Text>
+    </View>
   );
 }
 
@@ -278,24 +299,9 @@ export default function Community() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
       >
-        {/* Campus banner */}
-        <Image source={BANNER} style={styles.banner} resizeMode="cover" />
-
         <View style={styles.inner}>
-          <Text style={styles.title}>Community</Text>
+          <Text style={TYPE.screenTitle}>Community</Text>
           <Text style={styles.subtitle}>See what other Vols are saying.</Text>
-
-          <Link href="../service-reviews" asChild>
-            <TouchableOpacity accessibilityRole="button" style={styles.button}>
-              <View style={styles.buttonText}>
-                <Text style={styles.buttonTitle}>Service Reviews</Text>
-                <Text style={styles.buttonSubtitle}>
-                  Rate cleanliness and service at your dining halls
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={22} color="white" />
-            </TouchableOpacity>
-          </Link>
 
           {/* New / Hot switch */}
           <View style={styles.sortRow}>
@@ -319,7 +325,7 @@ export default function Community() {
             style={styles.filterRow}
             contentContainerStyle={{ paddingRight: 24 }}
           >
-            {[{ id: null, label: "All", emoji: "✨" }, ...TAGS].map((tag) => {
+            {[{ id: null, label: "All" }, ...TAGS].map((tag) => {
               const active = tagFilter === tag.id;
               return (
                 <TouchableOpacity
@@ -328,7 +334,7 @@ export default function Community() {
                   onPress={() => setTagFilter(tag.id)}
                 >
                   <Text style={[styles.filterText, active && styles.filterTextActive]}>
-                    {tag.emoji} {tag.label}
+                    {tag.label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -355,6 +361,7 @@ export default function Community() {
                 <View style={styles.cardBody}>
                   <TagPill tag={post.tag} onPress={() => setTagFilter(post.tag)} />
                   {!!post.text && <Text style={styles.postText}>{post.text}</Text>}
+                  <DishBadge dish={post.dish} />
                   {post.poll && (
                     <PollView poll={post.poll} onChoose={(id) => votePoll(post, id)} />
                   )}
@@ -393,8 +400,8 @@ export default function Community() {
         accessibilityRole="button"
         onPress={() => setComposerOpen(true)}
       >
-        <Ionicons name="add" size={22} color="white" />
-        <Text style={styles.fabText}>New Post</Text>
+        <Ionicons name="add" size={22} color={COLORS.text} />
+        <Text style={styles.fabText}>New post</Text>
       </TouchableOpacity>
 
       {composerOpen && (
@@ -439,9 +446,45 @@ function NewPostModal({
   const [pollOptions, setPollOptions] = useState<string[] | null>(null); // null = no poll
   const [posting, setPosting] = useState(false);
 
+  // Optional dish rating. Only shown once the user taps "Add a dish rating".
+  const [dishOpen, setDishOpen] = useState(false);
+  const [dishes, setDishes] = useState<string[] | null>(null); // null = loading
+  const [dishesError, setDishesError] = useState("");
+  const [dishName, setDishName] = useState<string | null>(null);
+  const [dishRating, setDishRating] = useState<"up" | "down" | null>(null);
+
+  const closeDish = () => {
+    setDishOpen(false);
+    setDishName(null);
+    setDishRating(null);
+  };
+
+  // Load today's dishes for the tagged hall when the dish picker is open.
+  useEffect(() => {
+    if (!dishOpen || !tag || !isHallTag(tag)) return;
+    let cancelled = false;
+    setDishes(null);
+    setDishesError("");
+    setDishName(null);
+    fetchCurrentDishes(tag)
+      .then((list) => {
+        if (!cancelled) setDishes(list);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDishes([]);
+          setDishesError("Today's menu isn't available for this hall yet.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dishOpen, tag]);
+
   const filledOptions = (pollOptions ?? []).filter((o) => o.trim());
   const pollReady = pollOptions === null || (text.trim().length > 0 && filledOptions.length >= 2);
-  const canPost = (text.trim().length > 0 || photo !== null) && pollReady && !posting;
+  const dishReady = !dishOpen || (dishName !== null && dishRating !== null);
+  const canPost = (text.trim().length > 0 || photo !== null) && pollReady && dishReady && !posting;
 
   const setOption = (index: number, value: string) =>
     setPollOptions((options) => options!.map((o, i) => (i === index ? value : o)));
@@ -477,7 +520,14 @@ function NewPostModal({
       }
       const newPost = await api("/community/posts", {
         method: "POST",
-        body: { text, image, tag, pollOptions: pollOptions ? filledOptions : undefined },
+        body: {
+          text,
+          image,
+          tag,
+          pollOptions: pollOptions ? filledOptions : undefined,
+          dish:
+            dishOpen && dishName && dishRating ? { name: dishName, rating: dishRating } : undefined,
+        },
       });
       onPosted(newPost);
     } catch (err) {
@@ -496,7 +546,7 @@ function NewPostModal({
           <TouchableOpacity onPress={onClose} hitSlop={10}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.composeTitle}>New Post</Text>
+          <Text style={styles.composeTitle}>New post</Text>
           <TouchableOpacity
             style={[styles.postButton, !canPost && styles.disabled]}
             disabled={!canPost}
@@ -516,10 +566,14 @@ function NewPostModal({
                 <TouchableOpacity
                   key={t.id}
                   style={[styles.filterChip, active && styles.filterChipActive]}
-                  onPress={() => setTag(active ? null : t.id)}
+                  onPress={() => {
+                    const next = active ? null : t.id;
+                    setTag(next);
+                    if (!isHallTag(next)) closeDish(); // dish ratings need a dining hall
+                  }}
                 >
                   <Text style={[styles.filterText, active && styles.filterTextActive]}>
-                    {t.emoji} {t.label}
+                    {t.label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -576,6 +630,100 @@ function NewPostModal({
             </View>
           )}
 
+          {/* Optional dish rating */}
+          {!dishOpen ? (
+            <View style={styles.dishAddWrap}>
+              <TouchableOpacity
+                style={[styles.dishAddButton, !isHallTag(tag) && styles.disabled]}
+                disabled={!isHallTag(tag)}
+                onPress={() => setDishOpen(true)}
+                accessibilityRole="button"
+              >
+                <Ionicons name="thumbs-up-outline" size={18} color={COLORS.textSecondary} />
+                <Text style={styles.dishAddText}>Add a dish rating (optional)</Text>
+              </TouchableOpacity>
+              {!isHallTag(tag) && (
+                <Text style={styles.dishHint}>
+                  Tag Rocky Top, Stokely or Southern Kitchen to rate a dish.
+                </Text>
+              )}
+            </View>
+          ) : (
+            <View style={styles.dishCard}>
+              <View style={styles.dishCardHeader}>
+                <Text style={TYPE.label}>RATE A DISH</Text>
+                <TouchableOpacity onPress={closeDish} hitSlop={10}>
+                  <Text style={styles.dishRemove}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+
+              {dishes === null ? (
+                <ActivityIndicator color={ORANGE} style={{ marginVertical: 8 }} />
+              ) : dishes.length === 0 ? (
+                <>
+                  <Text style={styles.dishHint}>
+                    {dishesError || "No dishes listed for this meal right now."} Type the dish
+                    name instead.
+                  </Text>
+                  <TextInput
+                    style={styles.pollEditInput}
+                    placeholder="e.g. BBQ turkey panini"
+                    placeholderTextColor="#999"
+                    maxLength={80}
+                    value={dishName ?? ""}
+                    onChangeText={(value) => setDishName(value.trim() ? value : null)}
+                    accessibilityLabel="Dish name"
+                  />
+                </>
+              ) : (
+                <ScrollView style={styles.dishList} nestedScrollEnabled>
+                  <View style={styles.tagPicker}>
+                    {dishes.map((dish) => {
+                      const active = dishName === dish;
+                      return (
+                        <TouchableOpacity
+                          key={dish}
+                          style={[styles.filterChip, active && styles.filterChipActive]}
+                          onPress={() => setDishName(active ? null : dish)}
+                          accessibilityState={{ selected: active }}
+                        >
+                          <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                            {dish}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              )}
+
+              <View style={styles.thumbRow}>
+                <TouchableOpacity
+                  style={[styles.thumbButton, dishRating === "up" && styles.thumbUpOn]}
+                  onPress={() => setDishRating("up")}
+                  accessibilityState={{ selected: dishRating === "up" }}
+                >
+                  <Ionicons
+                    name="thumbs-up-outline"
+                    size={18}
+                    color={dishRating === "up" ? COLORS.success : COLORS.text}
+                  />
+                  <Text style={[styles.thumbText, dishRating === "up" && { color: COLORS.success }]}>
+                    Liked it
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.thumbButton, dishRating === "down" && styles.thumbDownOn]}
+                  onPress={() => setDishRating("down")}
+                  accessibilityState={{ selected: dishRating === "down" }}
+                >
+                  <Ionicons name="thumbs-down-outline" size={18} color={COLORS.text} />
+                  <Text style={styles.thumbText}>Not for me</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {photo && (
             <View>
               <Image source={{ uri: photo.uri }} style={styles.composePhoto} resizeMode="cover" />
@@ -593,12 +741,12 @@ function NewPostModal({
         <View style={styles.composeToolbar}>
           <View style={styles.toolbarButtons}>
             <TouchableOpacity style={styles.photoButton} onPress={pickPhoto}>
-              <Ionicons name="image-outline" size={22} color={ORANGE} />
+              <Ionicons name="image-outline" size={22} color={COLORS.orangeText} />
               <Text style={styles.photoButtonText}>{photo ? "Change photo" : "Photo"}</Text>
             </TouchableOpacity>
             {!pollOptions && (
               <TouchableOpacity style={styles.photoButton} onPress={() => setPollOptions(["", ""])}>
-                <Ionicons name="stats-chart-outline" size={20} color={ORANGE} />
+                <Ionicons name="stats-chart-outline" size={20} color={COLORS.orangeText} />
                 <Text style={styles.photoButtonText}>Poll</Text>
               </TouchableOpacity>
             )}
@@ -610,7 +758,9 @@ function NewPostModal({
         <Text style={styles.anonNote}>
           {pollOptions && !pollReady
             ? "Polls need a question and at least 2 options."
-            : "Your post is anonymous."}
+            : !dishReady
+              ? "Pick a dish and a thumbs up or down, or remove the dish rating."
+              : "Your post is anonymous."}
         </Text>
       </KeyboardAvoidingView>
     </Modal>
@@ -763,7 +913,7 @@ function PostThread({
       >
         <View style={styles.threadHeader}>
           <TouchableOpacity onPress={onClose} hitSlop={10} style={styles.backRow}>
-            <Ionicons name="arrow-back" size={20} color="#C76100" />
+            <Ionicons name="arrow-back" size={20} color={COLORS.orangeText} />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
         </View>
@@ -776,6 +926,7 @@ function PostThread({
               <View style={styles.cardBody}>
                 <TagPill tag={post.tag} />
                 {!!post.text && <Text style={[styles.postText, { fontSize: 18 }]}>{post.text}</Text>}
+                <DishBadge dish={post.dish} />
                 {post.poll && <PollView poll={post.poll} onChoose={votePoll} />}
                 {post.image && (
                   <Image
@@ -855,7 +1006,7 @@ function PostThread({
             disabled={!draft.trim() || sending}
             style={[styles.sendButton, (!draft.trim() || sending) && styles.disabled]}
           >
-            <Ionicons name="send" size={18} color="white" />
+            <Ionicons name="send" size={18} color={COLORS.text} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -866,117 +1017,188 @@ function PostThread({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F7F7",
+    backgroundColor: COLORS.background,
   },
   content: {
     paddingBottom: 100, // room for the New Post button
   },
-  banner: {
-    width: "100%",
-    height: 200,
-  },
   inner: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: "800",
-    color: ORANGE,
+    paddingHorizontal: SPACING.screen,
+    paddingTop: SPACING.topInset,
   },
   subtitle: {
-    marginTop: 8,
-    marginBottom: 20,
-    fontSize: 16,
-    color: "#666",
-  },
-  button: {
-    minHeight: 76,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    backgroundColor: ORANGE,
-    borderRadius: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  buttonText: {
-    flex: 1,
-    marginRight: 12,
-  },
-  buttonTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "white",
-  },
-  buttonSubtitle: {
     marginTop: 4,
-    fontSize: 13,
-    color: "white",
+    fontSize: 15,
+    color: COLORS.muted,
   },
 
   // New / Hot
   sortRow: {
     flexDirection: "row",
-    marginTop: 24,
+    alignSelf: "flex-start",
+    padding: 3,
+    gap: 3,
+    marginTop: 18,
     marginBottom: 12,
+    backgroundColor: "#ECEBE7",
+    borderRadius: RADIUS.md,
   },
   sortChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: "#EAEAEA",
-    marginRight: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+    borderRadius: 9,
   },
   sortChipActive: {
-    backgroundColor: ORANGE,
+    backgroundColor: COLORS.card,
   },
   sortText: {
-    fontWeight: "600",
-    color: "#555",
+    fontWeight: "500",
+    color: COLORS.muted,
   },
   sortTextActive: {
-    color: "white",
+    fontWeight: "700",
+    color: COLORS.text,
   },
   // Dining hall filter + tag chips
   filterRow: {
-    marginBottom: 14,
-    marginRight: -24,
+    marginBottom: 10,
+    marginRight: -SPACING.screen,
   },
   filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: "white",
+    minHeight: 36,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    backgroundColor: COLORS.card,
     borderWidth: 1,
-    borderColor: "#E2E2E2",
+    borderColor: COLORS.inputBorder,
     marginRight: 8,
     marginBottom: 8,
   },
   filterChipActive: {
-    backgroundColor: "#FFF1E3",
-    borderColor: ORANGE,
+    backgroundColor: COLORS.orangeTint,
+    borderColor: COLORS.orangeBorder,
   },
   filterText: {
-    fontSize: 14,
-    color: "#555",
+    fontSize: 13,
+    color: COLORS.text,
     fontWeight: "600",
   },
   filterTextActive: {
-    color: "#C76100",
+    color: COLORS.orangeText,
   },
   tagPill: {
     alignSelf: "flex-start",
-    backgroundColor: "#FFF1E3",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    backgroundColor: COLORS.orangeTint,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
     marginBottom: 8,
   },
   tagPillText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#C76100",
+    color: COLORS.orangeText,
+  },
+
+  // Dish rating badge on posts
+  dishBadge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  dishBadgeUp: {
+    backgroundColor: COLORS.successTint,
+  },
+  dishBadgeDown: {
+    backgroundColor: COLORS.chip,
+  },
+  dishBadgeText: {
+    fontSize: 13,
+    fontWeight: "700",
+    flexShrink: 1,
+  },
+
+  // Dish picker in the New Post pop-up
+  dishAddWrap: {
+    marginTop: 12,
+    gap: 6,
+  },
+  dishAddButton: {
+    minHeight: 50,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: COLORS.inputBorder,
+    borderRadius: RADIUS.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  dishAddText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+  },
+  dishHint: {
+    fontSize: 13,
+    color: COLORS.muted,
+  },
+  dishCard: {
+    marginTop: 12,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    padding: 14,
+    gap: 10,
+  },
+  dishCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  dishRemove: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.muted,
+  },
+  dishList: {
+    maxHeight: 180,
+  },
+  thumbRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  thumbButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.inputBorder,
+    backgroundColor: COLORS.card,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  thumbUpOn: {
+    backgroundColor: COLORS.successTint,
+    borderColor: COLORS.successBorder,
+  },
+  thumbDownOn: {
+    backgroundColor: COLORS.chip,
+    borderColor: COLORS.faint,
+  },
+  thumbText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.text,
   },
 
   // Polls
@@ -1015,7 +1237,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   pollOptionTextMine: {
-    color: "#C76100",
+    color: COLORS.orangeText,
   },
   pollPercent: {
     fontSize: 14,
@@ -1069,7 +1291,7 @@ const styles = StyleSheet.create({
   pollEditLink: {
     fontSize: 15,
     fontWeight: "600",
-    color: ORANGE,
+    color: COLORS.orangeText,
   },
   pollRemoveLink: {
     fontSize: 15,
@@ -1089,12 +1311,12 @@ const styles = StyleSheet.create({
   // Post cards
   card: {
     flexDirection: "row",
-    backgroundColor: "white",
-    borderRadius: 14,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#EEE",
+    borderColor: COLORS.border,
   },
   cardBody: {
     flex: 1,
@@ -1135,7 +1357,7 @@ const styles = StyleSheet.create({
   opTag: {
     fontSize: 11,
     fontWeight: "700",
-    color: "white",
+    color: COLORS.text,
     backgroundColor: ORANGE,
     paddingHorizontal: 6,
     paddingVertical: 1,
@@ -1158,22 +1380,22 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 20,
     bottom: 20,
+    minHeight: 52,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: ORANGE,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 28,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    paddingHorizontal: 20,
+    borderRadius: 26,
+    shadowColor: ORANGE,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 5,
   },
   fabText: {
     marginLeft: 6,
-    color: "white",
-    fontSize: 16,
+    color: COLORS.text,
+    fontSize: 15,
     fontWeight: "700",
   },
 
@@ -1191,7 +1413,7 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 16,
-    color: "#C76100",
+    color: COLORS.orangeText,
     fontWeight: "600",
   },
   composeTitle: {
@@ -1206,7 +1428,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   postButtonText: {
-    color: "white",
+    color: COLORS.text,
     fontWeight: "700",
   },
   disabled: {
@@ -1256,7 +1478,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontSize: 15,
     fontWeight: "600",
-    color: ORANGE,
+    color: COLORS.orangeText,
   },
   counter: {
     fontSize: 12,
@@ -1286,7 +1508,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontSize: 15,
     fontWeight: "600",
-    color: "#C76100",
+    color: COLORS.orangeText,
   },
   threadContent: {
     padding: 20,

@@ -1,16 +1,30 @@
 import {
-  SafeAreaView,
+  ImageBackground,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import LogoutButton from "../../components/LogoutButton";
-import { DINING_HALLS, getHallStatus, getSplash } from "../../lib/mealPeriods";
+import CrowdBars from "../../components/CrowdBars";
+import { API_URL } from "../../lib/config";
+import { useAuth } from "../../context/AuthContext";
+import { crowdBars, crowdLabel, useCrowd } from "../../lib/crowd";
+import {
+  DINING_HALLS,
+  getHallState,
+  getHallStatus,
+  getSplash,
+  type DiningHall,
+} from "../../lib/mealPeriods";
+import { COLORS, RADIUS, SHADOW, SPACING, TYPE } from "../../lib/theme";
+
+const BANNER = require("../../../assets/images/community-banner.jpg");
 
 // How often to re-check the clock so the splash and open halls stay current.
 const CLOCK_CHECK_MS = 30 * 1000;
@@ -18,10 +32,105 @@ const CLOCK_CHECK_MS = 30 * 1000;
 function openHall(id: string) {
   if (id === "rocky-top") router.push("/rocky-top");
   else if (id === "stokely") router.push("/stokely");
+  else router.push("/(tabs)/dining");
+}
+
+// Progress through the current meal, using whichever open hall closes last.
+function mealProgress(now: Date) {
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  let best: { start: number; end: number } | null = null;
+  for (const hall of DINING_HALLS) {
+    const state = getHallState(hall, now);
+    if (state.open && (!best || state.end > best.end)) {
+      best = { start: state.start, end: state.end };
+    }
+  }
+  if (!best) return null;
+  const left = Math.max(0, best.end - minutes);
+  const fraction = Math.min(1, Math.max(0, (minutes - best.start) / (best.end - best.start)));
+  const hours = Math.floor(left / 60);
+  const mins = left % 60;
+  return {
+    fraction,
+    leftText: hours > 0 ? `${hours} hr ${mins} min left` : `${mins} min left`,
+  };
+}
+
+function HallRow({ hall, now }: { hall: DiningHall; now: Date }) {
+  const status = getHallStatus(hall, now);
+  const { summary } = useCrowd(hall.id);
+
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.hallCard, pressed && styles.pressed]}
+      onPress={() => openHall(hall.id)}
+      accessibilityRole="button"
+      accessibilityLabel={`${hall.name}, ${status.open ? "open" : "closed"}`}
+    >
+      <View style={styles.hallText}>
+        <View style={styles.hallTitleRow}>
+          <Text style={styles.hallName}>{hall.name}</Text>
+          <View style={status.open ? styles.openBadge : styles.closedBadge}>
+            <Text style={status.open ? styles.openText : styles.closedText}>
+              {status.open ? "OPEN" : "CLOSED"}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.hallInfo}>{status.info}</Text>
+        {status.open && (
+          <View style={styles.crowdRow}>
+            <CrowdBars filled={crowdBars(summary?.level ?? null)} />
+            <Text style={styles.crowdText}>{crowdLabel(summary?.level ?? null)}</Text>
+          </View>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={COLORS.faint} />
+    </Pressable>
+  );
+}
+
+type TopPost = { id: number; text: string; tag: string | null; createdAt: string };
+
+const TAG_LABELS: Record<string, string> = {
+  "rocky-top": "Rocky Top",
+  stokely: "Stokely",
+  "southern-kitchen": "Southern Kitchen",
+  general: "General",
+};
+
+// The hottest community post, shown as a preview on Home.
+function useTopPost() {
+  const { token } = useAuth();
+  const [post, setPost] = useState<TopPost | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    try {
+      const response = await fetch(`${API_URL}/api/community/posts?sort=hot`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (response.ok && Array.isArray(data)) {
+        setPost(data.find((p: TopPost) => p.text) ?? null);
+      }
+    } catch {
+      // Home still works without the preview.
+    } finally {
+      setLoaded(true);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return { post, loaded };
 }
 
 export default function Index() {
   const [now, setNow] = useState(() => new Date());
+  const { post, loaded } = useTopPost();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), CLOCK_CHECK_MS);
@@ -29,267 +138,302 @@ export default function Index() {
   }, []);
 
   const splash = getSplash(DINING_HALLS, now);
+  const progress = splash.open ? mealProgress(now) : null;
+  const dateText = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
 
   // Open halls first; otherwise keep the original order.
-  const halls = DINING_HALLS.map((hall) => ({
-    hall,
-    status: getHallStatus(hall, now),
-  })).sort((a, b) => Number(b.status.open) - Number(a.status.open));
+  const halls = [...DINING_HALLS].sort(
+    (a, b) => Number(getHallStatus(b, now).open) - Number(getHallStatus(a, now).open),
+  );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
-
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <Text style={styles.logo}>VOL Dining Social</Text>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
+      {/* Ayres Hall header */}
+      <ImageBackground
+        source={BANNER}
+        style={styles.hero}
+        imageStyle={styles.heroImage}
+        accessibilityLabel="Ayres Hall framed by fall trees"
+        accessibilityRole="image"
+      >
+        <View style={styles.heroShade} />
+        <View style={styles.heroTop}>
+          <View style={styles.logoutPill}>
             <LogoutButton />
           </View>
-          <Text style={styles.tagline}>Eat better together.</Text>
         </View>
+        <View style={styles.heroText}>
+          <Text style={styles.date}>{dateText}</Text>
+          <Text style={styles.logo}>
+            VOL Dining Social<Text style={{ color: COLORS.orange }}>.</Text>
+          </Text>
+        </View>
+      </ImageBackground>
 
-        {/* Meal Period */}
+      <View style={styles.body}>
+        {/* Meal period */}
         <View style={styles.mealCard}>
           <Text style={styles.mealLabel}>{splash.label}</Text>
           <Text style={styles.mealTitle}>{splash.title}</Text>
           <Text style={styles.mealTime}>{splash.subtitle}</Text>
+          {progress && (
+            <View style={styles.progressWrap}>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${progress.fraction * 100}%` }]} />
+              </View>
+              <Text style={styles.mealTime}>{progress.leftText}</Text>
+            </View>
+          )}
         </View>
 
-        {/* Section Header */}
+        {/* Dining halls */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Dining Near You</Text>
-
-          <TouchableOpacity>
-            <Text style={styles.viewAll}>View All</Text>
-          </TouchableOpacity>
+          <Text style={TYPE.sectionTitle}>Dining halls</Text>
+          <Pressable onPress={() => router.push("/(tabs)/dining")} hitSlop={10}>
+            <Text style={styles.link}>See all</Text>
+          </Pressable>
         </View>
-
-        {/* Dining Locations */}
-
-        {halls.map(({ hall, status }) => (
-          <TouchableOpacity
-            key={hall.id}
-            style={styles.restaurantCard}
-            onPress={() => openHall(hall.id)}
-          >
-            <View>
-              <Text style={styles.restaurantName}>{hall.name}</Text>
-              <Text style={styles.restaurantInfo}>{status.info}</Text>
-            </View>
-
-            <View style={status.open ? styles.openBadge : styles.closedBadge}>
-              <Text style={status.open ? styles.openText : styles.closedText}>
-                {status.open ? "OPEN" : "CLOSED"}
-              </Text>
-            </View>
-          </TouchableOpacity>
+        {halls.map((hall) => (
+          <HallRow key={hall.id} hall={hall} now={now} />
         ))}
 
-        {/* Community Preview */}
-
+        {/* Community preview */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Community</Text>
-
-          <TouchableOpacity>
-            <Text style={styles.viewAll}>See Posts</Text>
-          </TouchableOpacity>
+          <Text style={TYPE.sectionTitle}>From the community</Text>
+          <Pressable onPress={() => router.push("/(tabs)/community")} hitSlop={10}>
+            <Text style={styles.link}>See posts</Text>
+          </Pressable>
         </View>
-
-        <View style={styles.postCard}>
-          <Text style={styles.postUser}>Alex M.</Text>
-
-          <Text style={styles.postText}>
-            Rocky Top has the BBQ turkey panini tonight 🔥
-          </Text>
-
-          <View style={styles.postFooter}>
-            <Text style={styles.postAction}>♡ Like</Text>
-            <Text style={styles.postAction}>💬 Comment</Text>
-          </View>
-        </View>
-
-      </ScrollView>
-    </SafeAreaView>
+        <Pressable
+          style={({ pressed }) => [styles.postCard, pressed && styles.pressed]}
+          onPress={() => router.push("/(tabs)/community")}
+        >
+          {post ? (
+            <>
+              {post.tag && TAG_LABELS[post.tag] && (
+                <View style={styles.tagPill}>
+                  <Text style={styles.tagPillText}>{TAG_LABELS[post.tag]}</Text>
+                </View>
+              )}
+              <Text style={styles.postText} numberOfLines={3}>
+                {post.text}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.postEmpty}>
+              {loaded ? "No posts yet. Be the first to share what's good today." : "Loading..."}
+            </Text>
+          )}
+        </Pressable>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screen: {
     flex: 1,
-    backgroundColor: "#F7F7F7",
+    backgroundColor: COLORS.background,
   },
-
   container: {
-    padding: 20,
-    paddingBottom: 100,
+    paddingBottom: 32,
   },
 
-  header: {
-    marginBottom: 24,
-  },
-
-  headerTop: {
-    flexDirection: "row",
+  hero: {
+    height: 290,
     justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
+    backgroundColor: "#3A5A7A",
   },
-
+  heroImage: {
+    resizeMode: "cover",
+  },
+  heroShade: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.28)",
+  },
+  heroTop: {
+    paddingTop: 52,
+    paddingHorizontal: SPACING.screen,
+    alignItems: "flex-end",
+  },
+  logoutPill: {
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 12,
+  },
+  heroText: {
+    paddingHorizontal: SPACING.screen,
+    paddingBottom: 72,
+  },
+  date: {
+    color: "white",
+    fontSize: 13,
+    fontWeight: "600",
+  },
   logo: {
+    color: "white",
     fontSize: 30,
     fontWeight: "800",
-    color: "#FF8200",
-    flexShrink: 1,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowRadius: 10,
   },
 
-  tagline: {
-    fontSize: 15,
-    color: "#666",
-    marginTop: 4,
+  body: {
+    paddingHorizontal: SPACING.screen,
   },
 
   mealCard: {
-    backgroundColor: "#FF8200",
-    padding: 22,
-    borderRadius: 18,
-    marginBottom: 28,
+    marginTop: -56,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.xl,
+    padding: 18,
+    gap: 4,
+    ...SHADOW,
   },
-
   mealLabel: {
-    color: "#FFE1C2",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1,
+    ...TYPE.label,
+    color: COLORS.orangeText,
   },
-
   mealTitle: {
-    color: "white",
-    fontSize: 30,
+    fontSize: 26,
     fontWeight: "800",
-    marginTop: 4,
+    color: COLORS.text,
   },
-
   mealTime: {
-    color: "white",
-    marginTop: 4,
     fontSize: 14,
+    color: COLORS.muted,
+  },
+  progressWrap: {
+    marginTop: 10,
+    gap: 8,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.orangeTintStrong,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.orange,
   },
 
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "baseline",
+    marginTop: 26,
     marginBottom: 12,
-    marginTop: 4,
   },
-
-  sectionTitle: {
-    fontSize: 21,
-    fontWeight: "700",
-    color: "#222",
-  },
-
-  viewAll: {
-    color: "#FF8200",
-    fontWeight: "600",
-  },
-
-  restaurantCard: {
-    backgroundColor: "white",
-    padding: 18,
-    borderRadius: 14,
-    marginBottom: 12,
-
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-
-    elevation: 2,
-  },
-
-  restaurantName: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#222",
-  },
-
-  restaurantInfo: {
+  link: {
+    color: COLORS.orangeText,
     fontSize: 14,
-    color: "#777",
-    marginTop: 4,
+    fontWeight: "700",
   },
 
+  hallCard: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    padding: 16,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  hallText: {
+    flex: 1,
+    gap: 5,
+  },
+  hallTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  hallName: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  hallInfo: {
+    fontSize: 13,
+    color: COLORS.muted,
+  },
+  crowdRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  crowdText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: COLORS.textSecondary,
+  },
   openBadge: {
-    backgroundColor: "#E7F7ED",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
+    backgroundColor: COLORS.successTint,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
-
   openText: {
-    color: "#208A45",
+    color: COLORS.success,
     fontSize: 11,
     fontWeight: "800",
   },
-
   closedBadge: {
-    backgroundColor: "#EEEEEE",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
+    backgroundColor: COLORS.closedTint,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
-
   closedText: {
-    color: "#777",
+    color: COLORS.muted,
     fontSize: 11,
     fontWeight: "800",
   },
 
   postCard: {
-    backgroundColor: "white",
-    padding: 18,
-    borderRadius: 14,
-
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-
-    elevation: 2,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    padding: 16,
+    gap: 10,
   },
-
-  postUser: {
+  tagPill: {
+    alignSelf: "flex-start",
+    backgroundColor: COLORS.orangeTint,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  tagPillText: {
+    fontSize: 12,
     fontWeight: "700",
-    fontSize: 15,
-    marginBottom: 8,
+    color: COLORS.orangeText,
   },
-
   postText: {
     fontSize: 15,
     lineHeight: 21,
-    color: "#333",
+    color: COLORS.text,
   },
-
-  postFooter: {
-    flexDirection: "row",
-    marginTop: 16,
-    gap: 20,
-  },
-
-  postAction: {
-    color: "#666",
-    fontWeight: "500",
+  postEmpty: {
+    fontSize: 14,
+    color: COLORS.muted,
   },
 });

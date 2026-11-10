@@ -93,10 +93,44 @@ if (!postColumns.some((column) => column.name === "image_id")) {
 if (!postColumns.some((column) => column.name === "tag")) {
   db.exec("ALTER TABLE community_posts ADD COLUMN tag TEXT");
 }
+// Optional dish rating attached to a post: the dish's name and "up" or "down".
+if (!postColumns.some((column) => column.name === "dish_name")) {
+  db.exec("ALTER TABLE community_posts ADD COLUMN dish_name TEXT");
+}
+if (!postColumns.some((column) => column.name === "dish_rating")) {
+  db.exec("ALTER TABLE community_posts ADD COLUMN dish_rating TEXT");
+}
+
+// Dish ratings: one thumbs up/down per user, per dish, per hall, per day.
+// Menus change daily, so the Menu screen only counts today's ratings.
+// dish_key is the lowercased name so "BBQ Turkey Panini" and
+// "bbq turkey panini" count as the same dish.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS dish_ratings (
+    user_id INTEGER NOT NULL,
+    hall_id TEXT NOT NULL,
+    dish_key TEXT NOT NULL,
+    dish_name TEXT NOT NULL,
+    day TEXT NOT NULL,
+    value INTEGER NOT NULL CHECK (value IN (-1, 1)),
+    post_id INTEGER,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (user_id, hall_id, dish_key, day)
+  );
+`);
 
 // Dining hall tags a post can have (same ids the crowd meter and reviews use).
 const TAGS = new Set(["rocky-top", "stokely", "southern-kitchen", "general"]);
+const HALL_TAGS = new Set(["rocky-top", "stokely", "southern-kitchen"]);
 const MAX_POLL_OPTION_LENGTH = 50;
+const MAX_DISH_NAME_LENGTH = 80;
+
+// Today's date in Knoxville as "YYYY-MM-DD", so ratings reset at local midnight.
+function todayKey() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+const dishKey = (name) => name.trim().toLowerCase().replace(/\s+/g, " ");
 
 // ---------- Login check (same as the other routes) ----------
 function requireUser(req, res, next) {
@@ -156,6 +190,9 @@ function toPublic(row) {
     isMine: row.user_id === row.viewerId,
     image: row.image_id ?? null,
     tag: row.tag ?? null,
+    ...(row.dish_name !== undefined && {
+      dish: row.dish_name ? { name: row.dish_name, rating: row.dish_rating } : null,
+    }),
     ...(row.replyCount !== undefined && { replyCount: row.replyCount }),
     ...(row.isOP !== undefined && { isOP: !!row.isOP }),
   };
@@ -278,17 +315,37 @@ router.get("/community/images/:id", (req, res) => {
   res.send(image.data);
 });
 
-// POST /api/community/posts   body: { text, image?, tag?, pollOptions? }
+// POST /api/community/posts   body: { text, image?, tag?, pollOptions?, dish? }
 // A post needs text, a photo, or both. A poll needs text (the question)
-// and 2-4 options.
+// and 2-4 options. dish is optional: { name, rating: "up" | "down" }, and
+// only allowed when the post is tagged with a dining hall.
 router.post("/community/posts", requireUser, (req, res) => {
   const imageId = typeof req.body?.image === "string" ? req.body.image : null;
   const text = typeof req.body?.text === "string" ? req.body.text : "";
   const tag = req.body?.tag ?? null;
   const rawOptions = req.body?.pollOptions;
+  const rawDish = req.body?.dish ?? null;
 
   if (tag !== null && !TAGS.has(tag)) {
     return res.status(400).json({ error: "Pick a valid tag" });
+  }
+
+  let dish = null;
+  if (rawDish !== null) {
+    const name = typeof rawDish.name === "string" ? rawDish.name.trim() : "";
+    if (!HALL_TAGS.has(tag)) {
+      return res.status(400).json({ error: "Tag a dining hall to rate a dish" });
+    }
+    if (!name || name.length > MAX_DISH_NAME_LENGTH) {
+      return res.status(400).json({ error: "Pick a dish to rate" });
+    }
+    if (!["up", "down"].includes(rawDish.rating)) {
+      return res.status(400).json({ error: "Choose thumbs up or thumbs down" });
+    }
+    if (containsBadWords(name)) {
+      return res.status(400).json({ error: "That contains inappropriate language" });
+    }
+    dish = { name, rating: rawDish.rating };
   }
 
   let pollOptions = null;
@@ -320,12 +377,35 @@ router.post("/community/posts", requireUser, (req, res) => {
 
   const postId = db.transaction(() => {
     const result = db
-      .prepare("INSERT INTO community_posts (user_id, text, image_id, tag) VALUES (?, ?, ?, ?)")
-      .run(req.userId, text.trim(), imageId, tag);
+      .prepare(`
+        INSERT INTO community_posts (user_id, text, image_id, tag, dish_name, dish_rating)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .run(req.userId, text.trim(), imageId, tag, dish?.name ?? null, dish?.rating ?? null);
     (pollOptions ?? []).forEach((option, position) => {
       db.prepare("INSERT INTO community_poll_options (post_id, text, position) VALUES (?, ?, ?)")
         .run(result.lastInsertRowid, option, position);
     });
+    if (dish) {
+      // Rating the same dish again today replaces your earlier rating.
+      db.prepare(`
+        INSERT INTO dish_ratings (user_id, hall_id, dish_key, dish_name, day, value, post_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (user_id, hall_id, dish_key, day) DO UPDATE SET
+          dish_name = excluded.dish_name,
+          value = excluded.value,
+          post_id = excluded.post_id,
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      `).run(
+        req.userId,
+        tag,
+        dishKey(dish.name),
+        dish.name,
+        todayKey(),
+        dish.rating === "up" ? 1 : -1,
+        result.lastInsertRowid,
+      );
+    }
     return result.lastInsertRowid;
   })();
 
@@ -396,6 +476,8 @@ router.delete("/community/posts/:id", requireUser, (req, res) => {
     db.prepare("DELETE FROM community_reports WHERE target_type = 'post' AND target_id = ?").run(postId);
     db.prepare("DELETE FROM community_poll_votes WHERE post_id = ?").run(postId);
     db.prepare("DELETE FROM community_poll_options WHERE post_id = ?").run(postId);
+    // Deleting a post also takes back the dish rating it made.
+    db.prepare("DELETE FROM dish_ratings WHERE post_id = ?").run(postId);
     db.prepare("DELETE FROM community_posts WHERE id = ?").run(postId);
     if (post.image_id) {
       db.prepare("DELETE FROM community_images WHERE id = ?").run(post.image_id);
@@ -417,6 +499,44 @@ router.post("/community/posts/:id/replies", requireUser, (req, res) => {
     .run(post.id, req.userId, req.body.text.trim());
 
   res.status(201).json({ message: "Reply posted" });
+});
+
+// GET /api/dishes/ratings?hall=rocky-top
+// Today's thumbs up/down totals for every rated dish at one hall:
+// [{ name, up, down, total, percentLiked, myRating }]
+router.get("/dishes/ratings", requireUser, (req, res) => {
+  const hall = req.query.hall;
+  if (!HALL_TAGS.has(hall)) {
+    return res.status(400).json({ error: "Pick a valid dining hall" });
+  }
+
+  const rows = db
+    .prepare(`
+      SELECT dish_key,
+        MAX(dish_name) AS name,
+        SUM(value = 1) AS up,
+        SUM(value = -1) AS down,
+        MAX(CASE WHEN user_id = @userId THEN value END) AS mine
+      FROM dish_ratings
+      WHERE hall_id = @hall AND day = @day
+      GROUP BY dish_key
+      ORDER BY dish_key
+    `)
+    .all({ hall, day: todayKey(), userId: req.userId });
+
+  res.json(
+    rows.map((row) => {
+      const total = row.up + row.down;
+      return {
+        name: row.name,
+        up: row.up,
+        down: row.down,
+        total,
+        percentLiked: total ? Math.round((row.up / total) * 100) : 0,
+        myRating: row.mine === 1 ? "up" : row.mine === -1 ? "down" : null,
+      };
+    })
+  );
 });
 
 // Makes sure a post or reply exists before voting on / reporting it.
