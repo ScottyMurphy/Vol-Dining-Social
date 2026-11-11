@@ -146,6 +146,7 @@ export default function RockyTop() {
                 name: "Rocky Top Dining Hall",
                 menuUrl:
                   "https://dining.utk.edu/vendor/rocky-top-dining-hall/",
+                hallId: "rocky-top",
               },
             })
           }

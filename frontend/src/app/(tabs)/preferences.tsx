@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
 import { API_URL } from "../../lib/config";
 import { useAuth } from "../../context/AuthContext";
+import LogoutButton from "../../components/LogoutButton";
+import { COLORS, RADIUS, SPACING, TYPE } from "../../lib/theme";
 
 type PreferenceCategory = "dietary" | "allergen";
 type Preferences = Record<PreferenceCategory, string[]>;
@@ -127,53 +129,54 @@ export default function Preferences() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Preferences</Text>
-      <Text style={styles.subtitle}>
-        Customize food and allergy preferences for your account.
-      </Text>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
+      <Text style={TYPE.screenTitle}>Preferences</Text>
+      <Text style={styles.subtitle}>We&apos;ll highlight menu items that fit.</Text>
       {loading ? (
-        <ActivityIndicator color="#FF8200" style={styles.loading} />
+        <ActivityIndicator color={COLORS.orange} style={styles.loading} />
       ) : (
         <>
           {OPTIONS.map((section) => (
             <View key={section.category} style={styles.section}>
-              <Text style={styles.sectionTitle}>{section.title}</Text>
-              <Text style={styles.sectionDescription}>{section.description}</Text>
-              <View style={styles.options}>
-                {section.values.map((option) => {
+              <Text style={styles.sectionTitle}>
+                {section.category === "dietary" ? "DIETARY" : "ALLERGENS"}
+              </Text>
+              <View style={styles.group}>
+                {section.values.map((option, index) => {
                   const selected = preferences[section.category].includes(option.value);
                   return (
-                    <Pressable
+                    <View
                       key={option.value}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: selected, disabled: saving }}
-                      disabled={saving}
-                      onPress={() => togglePreference(section.category, option.value)}
-                      style={[
-                        styles.option,
-                        selected && styles.optionSelected,
-                        saving && styles.disabledOption,
-                      ]}
+                      style={[styles.row, index > 0 && styles.rowDivider]}
                     >
-                      <Text
-                        style={[
-                          styles.optionText,
-                          selected && styles.optionTextSelected,
-                        ]}
-                      >
-                        {selected ? "✓  " : ""}
-                        {option.label}
-                      </Text>
-                    </Pressable>
+                      <Text style={styles.rowLabel}>{option.label}</Text>
+                      <Switch
+                        value={selected}
+                        disabled={saving}
+                        onValueChange={() => togglePreference(section.category, option.value)}
+                        trackColor={{ false: COLORS.inputBorder, true: COLORS.orange }}
+                        thumbColor="#FFFFFF"
+                        ios_backgroundColor={COLORS.inputBorder}
+                        accessibilityLabel={option.label}
+                      />
+                    </View>
                   );
                 })}
               </View>
+              <Text style={styles.sectionDescription}>{section.description}</Text>
             </View>
           ))}
-          {saving && <ActivityIndicator color="#FF8200" style={styles.status} />}
+          {saving && <ActivityIndicator color={COLORS.orange} style={styles.status} />}
           {!!feedback && <Text style={styles.feedback}>{feedback}</Text>}
           {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>ACCOUNT</Text>
+            <View style={[styles.group, styles.accountRow]}>
+              <LogoutButton />
+            </View>
+          </View>
+
           <Text style={styles.note}>
             Dietary and allergen preferences are for guidance only. Always check
             ingredient and cross-contamination information with dining staff.
@@ -185,88 +188,81 @@ export default function Preferences() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 24,
-    paddingTop: 60,
-    backgroundColor: "#F7F7F7",
-    flexGrow: 1,
+  screen: {
+    flex: 1,
+    backgroundColor: COLORS.background,
   },
-  title: {
-    fontSize: 30,
-    fontWeight: "800",
-    color: "#FF8200",
+  container: {
+    padding: SPACING.screen,
+    paddingTop: SPACING.topInset,
+    paddingBottom: 40,
   },
   subtitle: {
-    marginTop: 8,
-    fontSize: 16,
-    color: "#666",
+    marginTop: 4,
+    fontSize: 15,
+    color: COLORS.muted,
   },
   loading: {
-    marginTop: 32,
+    marginTop: 30,
   },
   section: {
-    marginTop: 28,
-    padding: 18,
-    backgroundColor: "#FFF",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E8E8E8",
+    marginTop: 24,
   },
   sectionTitle: {
-    fontSize: 19,
-    fontWeight: "700",
-    color: "#222",
+    ...TYPE.label,
+    marginLeft: 4,
+    marginBottom: 8,
   },
   sectionDescription: {
-    marginTop: 5,
-    marginBottom: 14,
-    fontSize: 14,
-    color: "#666",
+    marginTop: 8,
+    marginLeft: 4,
+    fontSize: 13,
+    color: COLORS.muted,
   },
-  options: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 9,
-  },
-  option: {
+  group: {
+    backgroundColor: COLORS.card,
     borderWidth: 1,
-    borderColor: "#DDD",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.xl,
+    overflow: "hidden",
   },
-  optionSelected: {
-    backgroundColor: "#FFF1E3",
-    borderColor: "#FF8200",
+  row: {
+    minHeight: 54,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  disabledOption: {
-    opacity: 0.65,
+  rowDivider: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.divider,
   },
-  optionText: {
-    color: "#555",
-    fontSize: 14,
-    fontWeight: "600",
+  rowLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: COLORS.text,
   },
-  optionTextSelected: {
-    color: "#C76100",
+  accountRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   status: {
     marginTop: 16,
   },
   feedback: {
     marginTop: 14,
-    color: "#208A45",
-    fontSize: 14,
+    color: COLORS.success,
+    fontWeight: "600",
   },
   error: {
     marginTop: 14,
-    color: "#B00020",
-    fontSize: 14,
+    color: COLORS.danger,
+    fontWeight: "600",
   },
   note: {
-    marginTop: 22,
-    color: "#666",
-    fontSize: 13,
+    marginTop: 24,
+    fontSize: 12,
     lineHeight: 18,
+    color: COLORS.muted,
   },
 });
