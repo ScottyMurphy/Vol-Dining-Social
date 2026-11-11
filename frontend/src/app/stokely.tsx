@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import DiningMenu from "../components/dining-menu";
 import CrowdReportCard from "../components/CrowdReportCard";
 import {
   Alert,
@@ -137,7 +136,42 @@ export default function Stokely() {
           </View>
         )}
 
-        <DiningMenu hallId="stokely" hallName="Stokely" />
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() =>
+            router.push({
+              pathname: "/menu",
+              params: {
+                name: "Stokely Dining Hall",
+                menuUrl:
+                  "https://dining.utk.edu/vendor/stokely-dining-hall/",
+                hallId: "stokely",
+              },
+            })
+          }
+        >
+          <Ionicons
+            name="restaurant-outline"
+            size={22}
+            color="#FF8200"
+          />
+
+          <View style={styles.menuButtonContent}>
+            <Text style={styles.menuButtonText}>
+              View Today's Menu
+            </Text>
+
+            <Text style={styles.menuButtonSubtext}>
+              Breakfast • Lunch • Dinner
+            </Text>
+          </View>
+
+          <Ionicons
+            name="chevron-forward"
+            size={22}
+            color="#777"
+          />
+        </TouchableOpacity>
 
         <Text style={styles.sectionTitle}>What other Vols are thinking..
             
@@ -287,12 +321,25 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     borderWidth: 1,
     borderColor: "#E0E0E0",
+    flexDirection: "row",
+    alignItems: "center",
   },
 
   menuButtonText: {
     color: "#FF8200",
     fontWeight: "700",
     fontSize: 16,
+  },
+  
+  menuButtonContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  menuButtonSubtext: {
+    color: "#777",
+    fontSize: 12,
+    marginTop: 2,
   },
 
   sectionTitle: {
